@@ -12,6 +12,7 @@
 const script_dir = path self | path dirname
 
 use http-nu/router *
+use http-nu/html *
 
 use ./projection.nu
 
@@ -24,47 +25,84 @@ def hydrate-clip [clip: record]: nothing -> record {
   $clip | insert preview $preview | insert body $body
 }
 
+# Apple-symbol display for special keys; letters stay as-is. Used by the
+# status bar; keys.js doesn't see this -- it operates on the `combo` string.
+const KEY_GLYPH = {
+  "Cmd": "\u{2318}"      # ⌘
+  "Ctrl": "\u{2303}"     # ⌃
+  "Alt": "\u{2325}"      # ⌥
+  "Shift": "\u{21E7}"    # ⇧
+  "Enter": "\u{21B5}"    # ↵
+  "Esc": "ESC"           # the text "ESC", matching ~/stacks's convention
+}
+
+def glyphs [keys: list<string>]: nothing -> list<string> {
+  $keys | each {|k| $KEY_GLYPH | get -i $k | default $k }
+}
+
 # Single source of truth for "what keys exist in this mode" -- drives both
 # the data-keymap (for keys.js) and the status bar (for the user). Each
 # binding has a combo string (matching keys.js's `cmd+ctrl+alt+shift+key`
-# normalization), a short label, key glyphs for the status bar, and the
-# action (URL string or {url, source} record).
+# normalization), a short label, displayable key glyphs, and the action
+# (URL string or {url, source} record).
 def bindings-for [mode: string, ctx: record]: nothing -> list {
   match $mode {
     "compose" => [
-      {combo: "cmd+enter" label: "save"   keys: ["Cmd" "Enter"] action: {url: $"/compose/submit/($ctx.composeStackId)" source: "#compose-text"}}
-      {combo: "escape"    label: "cancel" keys: ["Esc"]         action: "/compose/cancel"}
+      {combo: "cmd+enter" label: "save"   keys: (glyphs [Cmd Enter]) action: {url: $"/compose/submit/($ctx.composeStackId)" source: "#compose-text"}}
+      {combo: "escape"    label: "cancel" keys: (glyphs [Esc])       action: "/compose/cancel"}
     ]
     "edit" => [
-      {combo: "cmd+enter" label: "save"   keys: ["Cmd" "Enter"] action: {url: $"/editor/submit/($ctx.editClipId)" source: "#compose-text"}}
-      {combo: "escape"    label: "cancel" keys: ["Esc"]         action: "/editor/cancel"}
+      {combo: "cmd+enter" label: "save"   keys: (glyphs [Cmd Enter]) action: {url: $"/editor/submit/($ctx.editClipId)" source: "#compose-text"}}
+      {combo: "escape"    label: "cancel" keys: (glyphs [Esc])       action: "/editor/cancel"}
     ]
     _ => {
       let core = [
-        {combo: "j"       label: "next clip"   keys: ["J"]         action: "/select/clip/down"}
-        {combo: "k"       label: "prev clip"   keys: ["K"]         action: "/select/clip/up"}
-        {combo: "shift+j" label: "next stack"  keys: ["Shift" "J"] action: "/select/stack/down"}
-        {combo: "shift+k" label: "prev stack"  keys: ["Shift" "K"] action: "/select/stack/up"}
-        {combo: "shift+n" label: "new stack"   keys: ["Shift" "N"] action: "/stacks/new"}
+        {combo: "j"       label: "next clip"   keys: (glyphs [J])       action: "/select/clip/down"}
+        {combo: "k"       label: "prev clip"   keys: (glyphs [K])       action: "/select/clip/up"}
+        {combo: "shift+j" label: "next stack"  keys: (glyphs [Shift J]) action: "/select/stack/down"}
+        {combo: "shift+k" label: "prev stack"  keys: (glyphs [Shift K]) action: "/select/stack/up"}
+        {combo: "shift+n" label: "new stack"   keys: (glyphs [Shift N]) action: "/stacks/new"}
       ]
       # `n` and `e` only bind when there's a target -- the URL carries the
       # id so handlers don't re-derive from ephemeral state (which a fresh
       # `.cat` snapshot can't see).
       let with_n = if $ctx.selectedStackId != null {
-        $core | append {combo: "n" label: "new clip" keys: ["N"] action: $"/compose/open/($ctx.selectedStackId)"}
+        $core | append {combo: "n" label: "new clip" keys: (glyphs [N]) action: $"/compose/open/($ctx.selectedStackId)"}
       } else { $core }
       if $ctx.selectedClipId != null {
-        $with_n | append {combo: "e" label: "edit clip" keys: ["E"] action: $"/editor/open/($ctx.selectedClipId)"}
+        $with_n | append {combo: "e" label: "edit clip" keys: (glyphs [E]) action: $"/editor/open/($ctx.selectedClipId)"}
       } else { $with_n }
     }
   }
 }
 
+# Stack-related affordances shown on the LEFT of the status bar in main mode.
+# Each is {label, icon, url} -- icon is an iconify name; url is POSTed on
+# mousedown. Empty list when there's no useful target.
+def stack-actions-for [mode: string, ctx: record]: nothing -> list {
+  if $mode != "main" { return [] }
+  let stack = $ctx.selectedStack
+  if $stack == null { return [] }
+  let next_sort = if $stack.sort == "auto" { "manual" } else { "auto" }
+  let sort_icon = if $stack.sort == "auto" {
+    "lucide:arrow-down-narrow-wide"
+  } else {
+    "lucide:list-ordered"
+  }
+  [
+    {label: $"sort: ($stack.sort)" icon: $sort_icon url: $"/stacks/($stack.id)/sort/($next_sort)"}
+  ]
+}
+
+# What goes on the LEFT of the status bar -- the stack name in main mode,
+# the modal title elsewhere.
 def mode-name-for [mode: string, ctx: record]: nothing -> string {
   match $mode {
     "compose" => $"New clip in ($ctx.composeStackName)"
     "edit" => $"Edit clip in ($ctx.editStackName)"
-    _ => "Stacks"
+    _ => {
+      if $ctx.selectedStack == null { "Stacks" } else { $ctx.selectedStack.name }
+    }
   }
 }
 
@@ -101,8 +139,10 @@ def view-model [state: record]: nothing -> record {
     editStackName: $edit_name
     selectedStackId: $state.selectedStackId
     selectedClipId: $state.selectedClipId
+    selectedStack: $stack
   }
   let bindings = bindings-for $state.mode $ctx
+  let stack_actions = stack-actions-for $state.mode $ctx
   # Stacks ordered by recent activity (any event touching the stack or its clips).
   let stacks_sorted = $state.stacks | sort-by lastTouched | reverse
   {
@@ -119,6 +159,7 @@ def view-model [state: record]: nothing -> record {
     editClip: $edit_clip
     editStackName: $edit_name
     bindings: $bindings
+    stackActions: $stack_actions
     keymap: (keymap-for $bindings)
   }
 }
@@ -130,10 +171,26 @@ def render-event [state: record]: nothing -> record {
 }
 
 def index-page []: nothing -> any {
-  # Path is fixed by `http-nu --datastar`. We don't read $DATASTAR_JS_PATH
-  # here so the page is also renderable from `http-nu eval` (no --datastar).
-  {datastar_js_path: "/datastar@1.0.0-RC.8.js"}
-  | .mj ($script_dir | path join "templates/index.html.j2")
+  # Path is fixed by `http-nu --datastar`; we hardcode it here so the page
+  # is also renderable from `http-nu eval` (no --datastar; no $DATASTAR_JS_PATH).
+  (
+    HTML
+    (
+      HEAD
+      (META {charset: "utf-8"})
+      (META {name: "viewport" content: "width=device-width,initial-scale=1"})
+      (TITLE "stacks.nu")
+      (LINK {rel: "stylesheet" href: "http://localhost:7331/assets/css/stellar"})
+      (LINK {rel: "stylesheet" href: "/base.css"})
+      (SCRIPT {type: "module" src: "/datastar@1.0.0-RC.8.js"})
+      (SCRIPT-ICONIFY)
+      (SCRIPT {src: "/keys.js"})
+    )
+    (
+      BODY {data-init: "@get('/updates')"}
+      (MAIN "loading...")
+    )
+  )
 }
 
 {|req|
@@ -233,6 +290,10 @@ def index-page []: nothing -> any {
     (route {method: "PATCH" path-matches: "/stacks/:id"} {|req ctx|
       let body = $in | from json
       .append stack.update --meta ($body | merge {id: $ctx.id})
+    })
+    (route {method: "POST" path-matches: "/stacks/:id/sort/:mode"} {|req ctx|
+      .append stack.update --meta {id: $ctx.id sort: $ctx.mode} | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
     })
     (route {method: "DELETE" path-matches: "/stacks/:id"} {|req ctx|
       .append stack.delete --meta {id: $ctx.id}

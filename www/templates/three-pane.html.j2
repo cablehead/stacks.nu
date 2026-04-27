@@ -158,12 +158,37 @@
     font-size: var(--font-size--2);
     color: var(--neutral-2-on);
   ">
-    <span style="font-weight: var(--font-weight-medium);">{{ modeName }}</span>
-    <span style="display: flex; gap: .9rem; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+    <span style="display: flex; gap: .5rem; align-items: center;">
+      {% for a in stackActions %}
+        <button
+          type="button"
+          data-on:mousedown="@post('{{ a.url | safe }}')"
+          title="{{ a.label }}"
+          aria-label="{{ a.label }}"
+          style="
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.4rem;
+            height: 1.4rem;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            border-radius: var(--border-radius-1);
+            cursor: pointer;
+            color: inherit;
+          "
+        ><iconify-icon icon="{{ a.icon }}" width="1em" height="1em"></iconify-icon></button>
+      {% endfor %}
+      <span style="font-weight: var(--font-weight-medium);">{{ modeName }}</span>
+    </span>
+    <span style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
       {% for b in bindings %}
-        <span>
-          {% for k in b.keys %}<kbd>{{ k }}</kbd>{% if not loop.last %}<span style="opacity:.5;">+</span>{% endif %}{% endfor %}
-          <span style="opacity: .75; margin-left: .25rem;">{{ b.label }}</span>
+        <span style="display: inline-flex; align-items: center; gap: .35rem;">
+          <span style="opacity: .75;">{{ b.label }}</span>
+          <span style="display: inline-flex; gap: .15rem;">
+            {% for k in b.keys %}<kbd>{{ k }}</kbd>{% endfor %}
+          </span>
         </span>
       {% endfor %}
     </span>

@@ -217,9 +217,11 @@ print "   ok"
 print "7. serve.nu: GET / returns the bootstrap HTML"
 let handler = source ($script_dir | path join serve.nu)
 let response = do $handler {method: "GET" path: "/" headers: {} query: {}}
-assert ($response | str contains "<main>") "page should include the <main> mount point"
-assert ($response | str contains "/keys.js") "page should load the keymap handler"
-assert ($response | str contains "/updates") "page should bootstrap the SSE stream"
+let html = $response | get __html
+assert ($html | str contains "<main>") "page should include the <main> mount point"
+assert ($html | str contains "/keys.js") "page should load the keymap handler"
+assert ($html | str contains "/updates") "page should bootstrap the SSE stream"
+assert ($html | str contains "iconify-icon@2") "bootstrap should pull in the iconify runtime"
 print "   ok"
 
 print "8. serve.nu: POST /stacks appends a stack.add frame"
@@ -351,18 +353,21 @@ assert ($live_clip.position == "a") "manual position survives"
 assert ($live_clip.hash == ($updates | first | get hash)) "projection tracks the latest hash"
 print "   ok"
 
-print "13. serve.nu: render emits data-keymap and a status bar that morphs per mode"
+print "13. serve.nu: status bar splits into stack-actions (left) and bindings (right)"
 let template = "/root/stacks.nu/www/templates/three-pane.html.j2"
 let main_view = {
-  stacks: [{id: "s1" name: "x" sort: "auto" clips: []}]
+  stacks: [{id: "s1" name: "Inbox" sort: "auto" clips: []}]
   selectedStackId: "s1" selectedClipId: null
   clips: [] selectedClip: null
-  mode: "main" modeName: "Stacks"
+  mode: "main" modeName: "Inbox"
   composeStackId: null composeStackName: ""
   editClipId: null editClip: null editStackName: ""
   bindings: [
-    {combo: "j"       label: "next clip" keys: ["J"]         action: "/select/clip/down"}
-    {combo: "shift+n" label: "new stack" keys: ["Shift" "N"] action: "/stacks/new"}
+    {combo: "j"       label: "next clip" keys: ["J"]    action: "/select/clip/down"}
+    {combo: "shift+n" label: "new stack" keys: ["\u{21E7}" "N"] action: "/stacks/new"}
+  ]
+  stackActions: [
+    {label: "sort: auto" icon: "lucide:arrow-down-narrow-wide" url: "/stacks/s1/sort/manual"}
   ]
   keymap: '{"j":"/select/clip/down","shift+n":"/stacks/new"}'
 }
@@ -370,17 +375,21 @@ let main_render = $main_view | .mj $template
 assert ($main_render | str contains 'data-keymap=') "main render should expose data-keymap"
 assert ($main_render | str contains '/stacks/new') "keymap should include /stacks/new"
 assert ($main_render | str contains '<footer aria-label="Status"') "status footer should be present"
-assert ($main_render | str contains '>Stacks<') "status footer should show the mode name"
+assert ($main_render | str contains '>Inbox<') "status footer should show the stack name"
+assert ($main_render | str contains 'iconify-icon') "stack actions should use iconify icons"
+assert ($main_render | str contains '/stacks/s1/sort/manual') "stack actions should include the sort toggle"
 assert ($main_render | str contains 'next clip') "status footer should list binding labels"
+assert ($main_render | str contains "\u{21E7}") "shift glyph should appear in keys"
 
 let compose_view = $main_view
   | update mode "compose"
   | update modeName "New clip in Inbox"
   | update composeStackId "s1" | update composeStackName "Inbox"
   | update bindings [
-      {combo: "cmd+enter" label: "save" keys: ["Cmd" "Enter"] action: {url: "/compose/submit/s1" source: "#compose-text"}}
-      {combo: "escape" label: "cancel" keys: ["Esc"] action: "/compose/cancel"}
+      {combo: "cmd+enter" label: "save"   keys: ["\u{2318}" "\u{21B5}"] action: {url: "/compose/submit/s1" source: "#compose-text"}}
+      {combo: "escape"    label: "cancel" keys: ["\u{238B}"]            action: "/compose/cancel"}
     ]
+  | update stackActions []
   | update keymap '{"escape":"/compose/cancel","cmd+enter":{"url":"/compose/submit/s1","source":"#compose-text"}}'
 let compose_render = $compose_view | .mj $template
 assert ($compose_render | str contains 'compose-text') "compose render should include the textarea"
