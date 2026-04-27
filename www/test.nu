@@ -151,6 +151,21 @@ let cycled = [
 assert ($cycled.selectedStackId == "a2") $"cycle should follow render order; got ($cycled.selectedStackId)"
 print "   ok"
 
+print "5f. editor.open / editor.close toggle mode + editClipId"
+let editing = $FRAMES | append [
+  {topic: "editor.open"  id: "u4" hash: null meta: {clip_id: "c1"}}
+] | projection project
+assert ($editing.mode == "edit")
+assert ($editing.editClipId == "c1")
+
+let edit_done = $FRAMES | append [
+  {topic: "editor.open"  id: "u4" hash: null meta: {clip_id: "c1"}}
+  {topic: "editor.close" id: "u5" hash: null meta: {}}
+] | projection project
+assert ($edit_done.mode == "main")
+assert ($edit_done.editClipId == null)
+print "   ok"
+
 print "5b. compose.open / compose.close toggle mode + composeStackId"
 let opened = $FRAMES | append [
   {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
@@ -279,6 +294,33 @@ do $handler {method: "POST" path: "/stacks/new" headers: {} query: {}}
 let new_stacks = .cat | where topic == "stack.add" | get meta.name
 let stamped = $new_stacks | where {|n| $n =~ '^\d{4}-\d{2}-\d{2}'} | get -i 0
 assert ($stamped != null) "/stacks/new should produce a YYYY-MM-DD HH:MM name"
+print "   ok"
+
+print "12b. serve.nu: /editor/submit replaces a clip's content, selects the new clip"
+# Build a stack with one clip, then submit an edit.
+'{"name":"EditTest","sort":"manual"}' | do $handler {
+  method: "POST" path: "/stacks" headers: {} query: {}
+}
+let edit_stack = .cat | where topic == "stack.add" | last
+"original body" | do $handler {
+  method: "POST"
+  path: $"/stacks/($edit_stack.id)/clips"
+  headers: {} query: {mime_type: "text/plain" position: "a"}
+}
+let original = .cat | where topic == "clip.add" | last
+"edited body" | do $handler {
+  method: "POST"
+  path: $"/editor/submit/($original.id)"
+  headers: {} query: {}
+}
+# After edit: the original is deleted, a new clip exists with same position.
+let deleted = .cat | where topic == "clip.delete" and meta.id == $original.id | length
+assert ($deleted == 1) "original clip should be tombstoned"
+
+let projected = .cat | projection project
+let live_clip = $projected.stacks | where id == $edit_stack.id | first | get clips | first
+assert ($live_clip.position == "a") "new clip preserves the original position"
+assert ($live_clip.id != $original.id) "new clip has a new frame id"
 print "   ok"
 
 print "13. serve.nu: three-pane render emits data-keymap with the active mode's keys"

@@ -137,7 +137,7 @@
     {% endif %}
   </article>
 
-  {% if mode == "compose" %}
+  {% if mode == "compose" or mode == "edit" %}
   <div role="dialog" aria-modal="true" style="
     position: fixed;
     inset: 0;
@@ -165,14 +165,18 @@
         font-size: var(--font-size--1);
         color: var(--neutral-2-dim);
       ">
+        {% if mode == "compose" %}
         <span>New clip in {{ composeStackName }}</span>
+        {% else %}
+        <span>Edit clip in {{ editStackName }}</span>
+        {% endif %}
         <span><kbd>Cmd</kbd>+<kbd>Enter</kbd> save | <kbd>Esc</kbd> cancel</span>
       </header>
       <textarea
         id="compose-text"
-        data-init="el.focus()"
+        data-init="el.focus(); el.setSelectionRange(el.value.length, el.value.length)"
         spellcheck="false"
-        placeholder="Type your clip..."
+        placeholder="{% if mode == 'edit' %}Edit clip...{% else %}Type your clip...{% endif %}"
         style="
           flex: 1;
           width: 100%;
@@ -185,7 +189,7 @@
           font-size: var(--font-size-0);
           line-height: var(--font-line-height-1);
         "
-      ></textarea>
+      >{% if mode == "edit" and editClip %}{{ editClip.body }}{% endif %}</textarea>
     </div>
   </div>
   {% endif %}

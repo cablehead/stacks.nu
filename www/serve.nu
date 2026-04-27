@@ -33,6 +33,10 @@ def keymap-for [mode: string, ctx: record]: nothing -> string {
       "escape": "/compose/cancel"
       "cmd+enter": {url: $"/compose/submit/($ctx.composeStackId)" source: "#compose-text"}
     }
+    "edit" => {
+      "escape": "/editor/cancel"
+      "cmd+enter": {url: $"/editor/submit/($ctx.editClipId)" source: "#compose-text"}
+    }
     _ => {
       let base = {
         "j": "/select/clip/down"
@@ -41,17 +45,28 @@ def keymap-for [mode: string, ctx: record]: nothing -> string {
         "shift+k": "/select/stack/up"
         "shift+n": "/stacks/new"
       }
-      # `n` only binds when a stack is selected -- the URL carries the
-      # target id so the open handler doesn't have to re-derive it from
-      # ephemeral state (which a fresh `.cat` snapshot can't see).
-      if $ctx.selectedStackId != null {
+      # `n` and `e` only bind when there's a target -- the URL carries the
+      # id so handlers don't re-derive from ephemeral state (which a fresh
+      # `.cat` snapshot can't see).
+      let with_n = if $ctx.selectedStackId != null {
         $base | upsert n $"/compose/open/($ctx.selectedStackId)"
-      } else {
-        $base
-      }
+      } else { $base }
+      if $ctx.selectedClipId != null {
+        $with_n | upsert e $"/editor/open/($ctx.selectedClipId)"
+      } else { $with_n }
     }
   }
   $map | to json -r
+}
+
+# Locate a clip across all stacks; returns {clip, stackName} or null.
+def find-clip [state: record, clip_id: any]: nothing -> any {
+  if $clip_id == null { return null }
+  for s in $state.stacks {
+    let hit = $s.clips | where id == $clip_id | get -i 0
+    if $hit != null { return {clip: $hit stackName: $s.name} }
+  }
+  null
 }
 
 # Take the projection state and turn it into the template's view model.
@@ -61,6 +76,8 @@ def view-model [state: record]: nothing -> record {
   let clips = $raw_clips | each {|c| hydrate-clip $c }
   let selected = $clips | where id == $state.selectedClipId | get -i 0
   let compose_stack = $state.stacks | where id == $state.composeStackId | get -i 0
+  let edit_target = find-clip $state $state.editClipId
+  let edit_clip = if $edit_target == null { null } else { hydrate-clip $edit_target.clip }
   # Stacks ordered by recent activity (any event touching the stack or its clips).
   let stacks_sorted = $state.stacks | sort-by lastTouched | reverse
   {
@@ -72,7 +89,15 @@ def view-model [state: record]: nothing -> record {
     mode: $state.mode
     composeStackId: $state.composeStackId
     composeStackName: (if $compose_stack == null { "" } else { $compose_stack.name })
-    keymap: (keymap-for $state.mode {composeStackId: $state.composeStackId selectedStackId: $state.selectedStackId})
+    editClipId: $state.editClipId
+    editClip: $edit_clip
+    editStackName: (if $edit_target == null { "" } else { $edit_target.stackName })
+    keymap: (keymap-for $state.mode {
+      composeStackId: $state.composeStackId
+      editClipId: $state.editClipId
+      selectedStackId: $state.selectedStackId
+      selectedClipId: $state.selectedClipId
+    })
   }
 }
 
@@ -141,6 +166,36 @@ def index-page []: nothing -> any {
         $text | .append clip.add --meta {stack_id: $ctx.id mime_type: "text/plain"} | ignore
       }
       .append compose.close --meta {} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+
+    # ---- editor (ephemeral modal mode; submits as add-new + delete-old) ----
+    (route {method: "POST" path-matches: "/editor/open/:id"} {|req ctx|
+      .append editor.open --meta {clip_id: $ctx.id} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+    (route {method: "POST" path: "/editor/cancel"} {|req ctx|
+      .append editor.close --meta {} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+    (route {method: "POST" path-matches: "/editor/submit/:id"} {|req ctx|
+      let text = $in
+      if not ($text | str trim | is-empty) {
+        let old = .get $ctx.id
+        if $old != null {
+          let mime = $old.meta?.mime_type? | default "text/plain"
+          let base = {stack_id: $old.meta.stack_id mime_type: $mime}
+          let meta = if ($old.meta?.position? != null) {
+            $base | merge {position: $old.meta.position}
+          } else { $base }
+          let new_frame = $text | .append clip.add --meta $meta
+          .append clip.delete --meta {id: $ctx.id} | ignore
+          # Make sure selection lands on the new clip (matters for manual sort
+          # where add doesn't auto-bump).
+          .append clip.select --meta {id: $new_frame.id} --ttl ephemeral | ignore
+        }
+      }
+      .append editor.close --meta {} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
