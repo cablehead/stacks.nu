@@ -3,7 +3,7 @@
 Event-sourced clipboard stacks.
 [xs](https://github.com/cablehead/xs) for the log,
 [http-nu](https://github.com/cablehead/http-nu) for the routes,
-[Datastar](https://data-star.dev) for the page.
+[Datastar](https://data-star.dev) for the UI.
 
 The page holds no state. Selection, compose mode, the visible HTML — all
 projected on the server from frames in the event store and patched into
