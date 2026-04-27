@@ -181,19 +181,11 @@ def index-page []: nothing -> any {
     (route {method: "POST" path-matches: "/editor/submit/:id"} {|req ctx|
       let text = $in
       if not ($text | str trim | is-empty) {
-        let old = .get $ctx.id
-        if $old != null {
-          let mime = $old.meta?.mime_type? | default "text/plain"
-          let base = {stack_id: $old.meta.stack_id mime_type: $mime previous_id: $ctx.id}
-          let meta = if ($old.meta?.position? != null) {
-            $base | merge {position: $old.meta.position}
-          } else { $base }
-          let new_frame = $text | .append clip.add --meta $meta
-          .append clip.delete --meta {id: $ctx.id} | ignore
-          # Make sure selection lands on the new clip (matters for manual sort
-          # where add doesn't auto-bump).
-          .append clip.select --meta {id: $new_frame.id} --ttl ephemeral | ignore
-        }
+        # clip.update keeps the clip's identity stable -- selection, position,
+        # mime type all stay attached to the same id. Prior content lives on
+        # in the event log under the original clip.add and any earlier
+        # clip.update frames.
+        $text | .append clip.update --meta {id: $ctx.id} | ignore
       }
       .append editor.close --meta {} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }

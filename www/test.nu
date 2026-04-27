@@ -151,16 +151,17 @@ let cycled = [
 assert ($cycled.selectedStackId == "a2") $"cycle should follow render order; got ($cycled.selectedStackId)"
 print "   ok"
 
-print "5g. clip.add with previous_id meta records the predecessor on the projected clip"
+print "5g. clip.update swaps the clip's hash, keeps id stable, bumps stack lastTouched"
 let edited = [
-  {topic: "stack.add" id: "a1" hash: null   meta: {name: "X" sort: "auto"}}
-  {topic: "clip.add"  id: "c1" hash: "h1"   meta: {stack_id: "a1" mime_type: "text/plain"}}
-  {topic: "clip.add"  id: "c2" hash: "h2"   meta: {stack_id: "a1" mime_type: "text/plain" previous_id: "c1"}}
-  {topic: "clip.delete" id: "u1" hash: null meta: {id: "c1"}}
+  {topic: "stack.add"   id: "a1" hash: null   meta: {name: "X" sort: "auto"}}
+  {topic: "clip.add"    id: "c1" hash: "h1"   meta: {stack_id: "a1" mime_type: "text/plain"}}
+  {topic: "clip.update" id: "u1" hash: "h2"   meta: {id: "c1"}}
 ] | projection project
-let live_clip = $edited.stacks | first | get clips | first
-assert ($live_clip.id == "c2")
-assert ($live_clip.previous_id == "c1") $"previous_id should be c1, got ($live_clip.previous_id)"
+let stack = $edited.stacks | first
+let live_clip = $stack.clips | first
+assert ($live_clip.id == "c1") "clip identity is stable across edits"
+assert ($live_clip.hash == "h2") $"hash should track the latest update; got ($live_clip.hash)"
+assert ($stack.lastTouched == "u1") "edit bumps the stack's lastTouched"
 print "   ok"
 
 print "5f. editor.open / editor.close toggle mode + editClipId"
@@ -308,8 +309,7 @@ let stamped = $new_stacks | where {|n| $n =~ '^\d{4}-\d{2}-\d{2}'} | get -i 0
 assert ($stamped != null) "/stacks/new should produce a YYYY-MM-DD HH:MM name"
 print "   ok"
 
-print "12b. serve.nu: /editor/submit replaces a clip's content, selects the new clip"
-# Build a stack with one clip, then submit an edit.
+print "12b. serve.nu: /editor/submit emits clip.update, clip identity stays stable"
 '{"name":"EditTest","sort":"manual"}' | do $handler {
   method: "POST" path: "/stacks" headers: {} query: {}
 }
@@ -325,15 +325,17 @@ let original = .cat | where topic == "clip.add" | last
   path: $"/editor/submit/($original.id)"
   headers: {} query: {}
 }
-# After edit: the original is deleted, a new clip exists with same position.
-let deleted = .cat | where topic == "clip.delete" and meta.id == $original.id | length
-assert ($deleted == 1) "original clip should be tombstoned"
+
+# Single update event references the original by id; no add+delete dance.
+let updates = .cat | where topic == "clip.update" and meta.id == $original.id
+assert (($updates | length) == 1) "edit produces exactly one clip.update"
+assert (($updates | first | get hash) != null) "clip.update body is CAS-stored"
 
 let projected = .cat | projection project
 let live_clip = $projected.stacks | where id == $edit_stack.id | first | get clips | first
-assert ($live_clip.position == "a") "new clip preserves the original position"
-assert ($live_clip.id != $original.id) "new clip has a new frame id"
-assert ($live_clip.previous_id == $original.id) "new clip points back to the predecessor"
+assert ($live_clip.id == $original.id) "clip id stays stable across edit"
+assert ($live_clip.position == "a") "manual position survives"
+assert ($live_clip.hash == ($updates | first | get hash)) "projection tracks the latest hash"
 print "   ok"
 
 print "13. serve.nu: three-pane render emits data-keymap with the active mode's keys"

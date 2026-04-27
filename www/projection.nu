@@ -4,8 +4,8 @@
 #   stack.add    meta: {name, sort}                          frame.id = stack id
 #   stack.update meta: {id, name?, sort?}
 #   stack.delete meta: {id}
-#   clip.add     meta: {stack_id, mime_type, position?, previous_id?}
-#                                                                frame.id = clip id
+#   clip.add     meta: {stack_id, mime_type, position?}      frame.id = clip id
+#   clip.update  meta: {id}                                   body -> new hash; clip id stays stable
 #   clip.move    meta: {id, stack_id?, position?}
 #   clip.delete  meta: {id}
 #
@@ -49,6 +49,7 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
     "stack.update" => (stack-update $state $frame)
     "stack.delete" => (stack-delete $state $frame)
     "clip.add" => (clip-add $state $frame)
+    "clip.update" => (clip-update $state $frame)
     "clip.move" => (clip-move $state $frame)
     "clip.delete" => (clip-delete $state $frame)
     "stack.select" => (stack-select $state $frame)
@@ -124,7 +125,6 @@ def clip-add [state: record, frame: record] {
     hash: ($frame.hash?)
     mime_type: ($frame.meta?.mime_type? | default "text/plain")
     position: ($frame.meta?.position?)
-    previous_id: ($frame.meta?.previous_id?)
   }
   let stacks = $state.stacks | each {|s|
     if $s.id == $stack_id {
@@ -142,6 +142,22 @@ def clip-add [state: record, frame: record] {
   } else {
     $state | update stacks $stacks
   }
+}
+
+def clip-update [state: record, frame: record] {
+  let clip_id = $frame.meta.id
+  let new_hash = $frame.hash?
+  let stacks = $state.stacks | each {|s|
+    if ($s.clips | any {|c| $c.id == $clip_id }) {
+      let updated_clips = $s.clips | each {|c|
+        if $c.id == $clip_id { $c | update hash $new_hash } else { $c }
+      }
+      $s | update clips $updated_clips | update lastTouched $frame.id
+    } else {
+      $s
+    }
+  }
+  $state | update stacks $stacks
 }
 
 def clip-move [state: record, frame: record] {
