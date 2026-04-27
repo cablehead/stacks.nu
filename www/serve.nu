@@ -61,8 +61,10 @@ def view-model [state: record]: nothing -> record {
   let clips = $raw_clips | each {|c| hydrate-clip $c }
   let selected = $clips | where id == $state.selectedClipId | get -i 0
   let compose_stack = $state.stacks | where id == $state.composeStackId | get -i 0
+  # Stacks ordered by recent activity (any event touching the stack or its clips).
+  let stacks_sorted = $state.stacks | sort-by lastTouched | reverse
   {
-    stacks: $state.stacks
+    stacks: $stacks_sorted
     selectedStackId: $state.selectedStackId
     selectedClipId: $state.selectedClipId
     clips: $clips

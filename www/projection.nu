@@ -16,7 +16,7 @@
 #
 # State shape:
 #   {
-#     stacks: [{id, name, sort, clips: [{id, hash, mime_type, position}]}]
+#     stacks: [{id, name, sort, lastTouched, clips: [{id, hash, mime_type, position}]}]
 #     selectedStackId: string|null
 #     selectedClipId:  string|null
 #     mode:            "main" | "compose"  # active UI mode (compose, etc.)
@@ -86,6 +86,7 @@ def stack-add [state: record, frame: record] {
     name: ($frame.meta?.name? | default "Untitled")
     sort: ($frame.meta?.sort? | default "auto")
     clips: []
+    lastTouched: $frame.id
   }
   $state | update stacks ($state.stacks | append $stack)
 }
@@ -94,7 +95,7 @@ def stack-update [state: record, frame: record] {
   let id = $frame.meta.id
   let patch = $frame.meta | reject id
   let stacks = $state.stacks | each {|s|
-    if $s.id == $id { $s | merge $patch } else { $s }
+    if $s.id == $id { $s | merge $patch | update lastTouched $frame.id } else { $s }
   }
   $state | update stacks $stacks
 }
@@ -114,7 +115,7 @@ def clip-add [state: record, frame: record] {
   }
   let stacks = $state.stacks | each {|s|
     if $s.id == $stack_id {
-      $s | update clips ($s.clips | append $clip)
+      $s | update clips ($s.clips | append $clip) | update lastTouched $frame.id
     } else {
       $s
     }
@@ -148,8 +149,12 @@ def clip-move [state: record, frame: record] {
 
   let stacks = $state.stacks | each {|s|
     let stripped = $s | update clips ($s.clips | where id != $clip_id)
-    if $s.id == $target_id {
-      $stripped | update clips ($stripped.clips | append $moved)
+    let was_source = ($s.id == $current.id)
+    let is_target = ($s.id == $target_id)
+    if $is_target {
+      $stripped | update clips ($stripped.clips | append $moved) | update lastTouched $frame.id
+    } else if $was_source {
+      $stripped | update lastTouched $frame.id
     } else {
       $stripped
     }
@@ -159,8 +164,13 @@ def clip-move [state: record, frame: record] {
 
 def clip-delete [state: record, frame: record] {
   let clip_id = $frame.meta.id
+  let owner_id = $state.stacks
+    | where ($it.clips | any {|c| $c.id == $clip_id })
+    | get -i 0
+    | get -i id
   let stacks = $state.stacks | each {|s|
-    $s | update clips ($s.clips | where id != $clip_id)
+    let cleaned = $s | update clips ($s.clips | where id != $clip_id)
+    if $s.id == $owner_id { $cleaned | update lastTouched $frame.id } else { $cleaned }
   }
   $state | update stacks $stacks
 }

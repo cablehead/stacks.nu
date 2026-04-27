@@ -89,6 +89,26 @@ let manual = $FRAMES | append [
 assert ($manual.selectedClipId == "c3") $"manual should not bump, got ($manual.selectedClipId)"
 print "   ok"
 
+print "5c. stack ordering: lastTouched bumps with clip activity"
+# Two stacks created in order s1, s2; then a clip lands in s1 -- s1 should
+# now be the most-recently-touched.
+let touched = [
+  {topic: "stack.add" id: "a1" hash: null meta: {name: "First"  sort: "auto"}}
+  {topic: "stack.add" id: "a2" hash: null meta: {name: "Second" sort: "auto"}}
+  {topic: "clip.add"  id: "a3" hash: "x" meta: {stack_id: "a1" mime_type: "text/plain"}}
+] | projection project
+assert ($touched.stacks.0.lastTouched == "a3") $"a1.lastTouched should be a3 after the clip.add, got ($touched.stacks.0.lastTouched)"
+assert ($touched.stacks.1.lastTouched == "a2") "untouched a2 should still hold its add id"
+
+# stack.update also bumps activity.
+let renamed_state = [
+  {topic: "stack.add" id: "a1" hash: null meta: {name: "First"  sort: "auto"}}
+  {topic: "stack.add" id: "a2" hash: null meta: {name: "Second" sort: "auto"}}
+  {topic: "stack.update" id: "a4" hash: null meta: {id: "a1" name: "Renamed"}}
+] | projection project
+assert (($renamed_state.stacks | where id == "a1" | first | get lastTouched) == "a4") "rename should bump a1"
+print "   ok"
+
 print "5b. compose.open / compose.close toggle mode + composeStackId"
 let opened = $FRAMES | append [
   {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
