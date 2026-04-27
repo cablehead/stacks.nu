@@ -99,6 +99,46 @@ def hover_nth(n: int):
     return m
 
 
+def with_compose_open(host: str):
+    """Pop compose mode by appending an ephemeral compose.open frame to the
+    live SSE stream we just captured. We can't change history, but we CAN
+    capture afresh after triggering the mode."""
+    # Capture SSE state, then trigger mode, then capture again. Caller passes
+    # the pre-trigger SSE; we return a fresh post-trigger capture.
+    pass  # placeholder; see compose-mode capture below
+
+
+def capture_in_mode(open_url: str, close_url: str) -> str:
+    """Open a modal mode, capture the next SSE patch, then close."""
+    p = subprocess.Popen(
+        ["curl", "-sN", f"{HOST}/updates"],
+        stdout=subprocess.PIPE,
+    )
+    time.sleep(2)  # let the initial main-mode patch flush
+    subprocess.run(["curl", "-s", "-X", "POST", f"{HOST}{open_url}"],
+                   check=True, stdout=subprocess.DEVNULL)
+    time.sleep(3)  # collect the modal-mode patch
+    p.terminate()
+    out, _ = p.communicate(timeout=2)
+    subprocess.run(["curl", "-s", "-X", "POST", f"{HOST}{close_url}"],
+                   check=True, stdout=subprocess.DEVNULL)
+    # The stream contains both main-mode and modal-mode patches; the modal
+    # one is the LAST patch.
+    text = out.decode()
+    last = text.rfind("event: datastar-patch-elements")
+    return text[last:] if last != -1 else text
+
+
+def latest_stack_id() -> str:
+    """Pull the most-recently-touched stack id from the store via SSE."""
+    sse = capture_sse(seconds=4)
+    # Find the first `/compose/open/<id>` URL in the keymap
+    m = re.search(r'/compose/open/([a-z0-9]+)', sse)
+    if not m:
+        raise SystemExit("no /compose/open/<id> in keymap; need a selected stack")
+    return m.group(1)
+
+
 def main() -> None:
     print(f"capturing SSE from {HOST}...")
     sse = capture_sse()
@@ -107,6 +147,11 @@ def main() -> None:
     shoot("main-rest", bake(sse))
     shoot("main-hover-next-clip", bake(sse, hover_nth(0)))
     shoot("main-hover-edit-clip", bake(sse, hover_nth(-1)))
+
+    print("triggering compose mode...")
+    sid = latest_stack_id()
+    sse_compose = capture_in_mode(f"/compose/open/{sid}", "/compose/cancel")
+    shoot("compose-rest", bake(sse_compose))
 
     print(f"\nDone. View at {HOST}/shots")
 

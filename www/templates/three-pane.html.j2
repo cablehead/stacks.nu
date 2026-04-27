@@ -11,6 +11,7 @@
   "
 >
   <div style="
+    position: relative;
     display: grid;
     grid-template-columns: 14rem 18rem 1fr;
     flex: 1;
@@ -145,6 +146,49 @@
       <p style="color: var(--neutral-2-dim);">Nothing selected.</p>
     {% endif %}
   </article>
+
+  {% if mode == "compose" or mode == "edit" %}
+  <div role="dialog" aria-modal="true" style="
+    position: absolute;
+    inset: 0;
+    z-index: 1000;
+    padding: 1ch;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+  ">
+    <div style="
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--neutral-1);
+      color: var(--neutral-1-on);
+      border: 1px solid var(--neutral-3);
+      border-radius: var(--border-radius-3);
+      padding: 1rem 1.25rem;
+      box-shadow: 0 1.5rem 3rem rgba(0,0,0,0.4);
+    ">
+      <textarea
+        id="compose-text"
+        data-init="el.focus(); el.setSelectionRange(el.value.length, el.value.length)"
+        spellcheck="false"
+        placeholder="{% if mode == 'edit' %}Edit clip...{% else %}Type your clip...{% endif %}"
+        style="
+          flex: 1;
+          width: 100%;
+          resize: none;
+          outline: none;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          font-family: var(--font-mono);
+          font-size: var(--font-size-0);
+          line-height: var(--font-line-height-1);
+        "
+      >{% if mode == "edit" and editClip %}{{ editClip.body }}{% endif %}</textarea>
+    </div>
+  </div>
+  {% endif %}
+
   </div>
 
   <footer aria-label="Status" style="
@@ -192,60 +236,4 @@
     </span>
   </footer>
 
-  {% if mode == "compose" or mode == "edit" %}
-  <div role="dialog" aria-modal="true" style="
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    padding: 1ch;
-    background: rgba(0,0,0,0.45);
-    display: flex;
-  ">
-    <div style="
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background: var(--neutral-1);
-      color: var(--neutral-1-on);
-      border: 1px solid var(--neutral-3);
-      border-radius: var(--border-radius-3);
-      padding: 1rem 1.25rem;
-      box-shadow: 0 1.5rem 3rem rgba(0,0,0,0.4);
-    ">
-      <header style="
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        margin-bottom: .5rem;
-        font-size: var(--font-size--1);
-        color: var(--neutral-2-dim);
-      ">
-        {% if mode == "compose" %}
-        <span>New clip in {{ composeStackName }}</span>
-        {% else %}
-        <span>Edit clip in {{ editStackName }}</span>
-        {% endif %}
-        <span><kbd>Cmd</kbd>+<kbd>Enter</kbd> save | <kbd>Esc</kbd> cancel</span>
-      </header>
-      <textarea
-        id="compose-text"
-        data-init="el.focus(); el.setSelectionRange(el.value.length, el.value.length)"
-        spellcheck="false"
-        placeholder="{% if mode == 'edit' %}Edit clip...{% else %}Type your clip...{% endif %}"
-        style="
-          flex: 1;
-          width: 100%;
-          resize: none;
-          outline: none;
-          border: 0;
-          background: transparent;
-          color: inherit;
-          font-family: var(--font-mono);
-          font-size: var(--font-size-0);
-          line-height: var(--font-line-height-1);
-        "
-      >{% if mode == "edit" and editClip %}{{ editClip.body }}{% endif %}</textarea>
-    </div>
-  </div>
-  {% endif %}
 </main>
