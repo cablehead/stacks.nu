@@ -2,7 +2,7 @@
 
 Event-sourced clipboard stacks.
 [xs](https://github.com/cablehead/xs) for the log,
-[http-nu](https://github.com/cablehead/http-nu) for the seam,
+[http-nu](https://github.com/cablehead/http-nu) for the routes,
 [Datastar](https://data-star.dev) for the page.
 
 The page holds no state. Selection, compose mode, the visible HTML — all
