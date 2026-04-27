@@ -164,7 +164,7 @@ def index-page []: nothing -> any {
       }
     })
     (route {method: "GET"} {|req ctx|
-      .static ($script_dir | path join "www") $req.path
+      .static ($script_dir | path join "static") $req.path
     })
 
     (route true {|req ctx|
