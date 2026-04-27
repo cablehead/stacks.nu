@@ -1,0 +1,182 @@
+use std/assert
+
+const script_dir = path self | path dirname
+
+use ./projection.nu
+use ./stacks *
+
+# Synthetic frames stand in for what xs would emit. Real frames have hash
+# populated by xs's CAS; here we leave it null where it doesn't matter.
+const FRAMES = [
+  {topic: "stack.add"    id: "s1" hash: null meta: {name: "Inbox"  sort: "auto"}}
+  {topic: "stack.add"    id: "s2" hash: null meta: {name: "Pinned" sort: "manual"}}
+  {topic: "clip.add"     id: "c1" hash: "sha256-aaa" meta: {stack_id: "s1" mime_type: "text/plain"}}
+  {topic: "clip.add"     id: "c2" hash: "sha256-bbb" meta: {stack_id: "s1" mime_type: "text/plain"}}
+  {topic: "clip.add"     id: "c3" hash: "sha256-ccc" meta: {stack_id: "s2" mime_type: "image/png" position: "a"}}
+  {topic: "stack.update" id: "x"  hash: null meta: {id: "s1" name: "Recent"}}
+  {topic: "clip.move"    id: "x"  hash: null meta: {id: "c1" stack_id: "s2" position: "am"}}
+  {topic: "clip.delete"  id: "x"  hash: null meta: {id: "c2"}}
+]
+
+print "1. project: end-to-end fold over synthetic frames"
+let state = $FRAMES | projection project
+assert (($state.stacks | length) == 2)
+let s1 = $state.stacks | where id == "s1" | first
+assert ($s1.name == "Recent")
+assert (($s1.clips | length) == 0)
+let s2 = $state.stacks | where id == "s2" | first
+assert (($s2.clips | length) == 2)
+print "   ok"
+
+print "2. project: selection defaults to first stack / first clip"
+# After all FRAMES, s1 is empty and s2 has clips. Projection picks s1 (first
+# stack), and selectedClipId is null because s1 has no clips.
+assert ($state.selectedStackId == "s1") $"got ($state.selectedStackId)"
+assert ($state.selectedClipId == null)
+print "   ok"
+
+print "3. stack.select cycle: down then up returns to start"
+let with_sel = $FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {action: "down"}}
+] | projection project
+assert ($with_sel.selectedStackId == "s2")
+# s2 has its original c3 plus the moved c1. sorted-clips for manual sort
+# orders by position; c1's position "am" sorts after c3's "a".
+assert ($with_sel.selectedClipId == "c3") $"got ($with_sel.selectedClipId)"
+
+let cycled = $FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {action: "down"}}
+  {topic: "stack.select" id: "x" hash: null meta: {action: "up"}}
+] | projection project
+assert ($cycled.selectedStackId == "s1")
+print "   ok"
+
+print "4. clip.select cycle: within selected stack"
+let on_s2 = $FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "s2"}}
+  {topic: "clip.select"  id: "x" hash: null meta: {action: "down"}}
+] | projection project
+# stack.select to s2 starts on c3 (first by manual position); down -> c1
+assert ($on_s2.selectedClipId == "c1") $"got ($on_s2.selectedClipId)"
+print "   ok"
+
+print "5. project-stream: silent until xs.threshold; threshold emit has selection"
+let stream_input = ($FRAMES | first 2)
+  | append [{topic: "xs.threshold"}]
+  | append ($FRAMES | skip 2)
+let outs = $stream_input | projection project-stream
+let at_threshold = $outs | first
+assert ($at_threshold.selectedStackId == "s1") "threshold emit should have a default stack"
+let final = $outs | last
+assert (($final.stacks | where id == "s2" | first | get clips | length) == 2)
+print "   ok"
+
+print "6. apply-frame: ignores unknown topics"
+let s = projection empty
+let out = projection apply-frame $s {topic: "xs.pulse" id: "p" hash: null meta: null}
+# unknown topics still update frameId — strip it before comparing
+assert (($out | reject frameId) == ($s | reject frameId))
+print "   ok"
+
+print "7. serve.nu: GET / returns the bootstrap HTML"
+let handler = source ($script_dir | path join serve.nu)
+let response = do $handler {method: "GET" path: "/" headers: {} query: {}}
+assert ($response | str contains "<main>") "page should include the <main> mount point"
+assert ($response | str contains "datastar-on-keys") "page should load the on-keys plugin"
+assert ($response | str contains "/updates") "page should bootstrap the SSE stream"
+print "   ok"
+
+print "8. serve.nu: POST /stacks appends a stack.add frame"
+'{"name": "Inbox", "sort": "auto"}' | do $handler {
+  method: "POST" path: "/stacks" headers: {} query: {}
+}
+let added = .cat | where topic == "stack.add" | first
+assert ($added.meta.name == "Inbox")
+let stack_id = $added.id
+
+# Add a clip; body bytes go to CAS via xs.
+"hello, clipboard" | do $handler {
+  method: "POST"
+  path: $"/stacks/($stack_id)/clips"
+  headers: {}
+  query: {mime_type: "text/plain"}
+}
+let clip_frame = .cat | where topic == "clip.add" | first
+assert ($clip_frame.meta.stack_id == $stack_id)
+assert ($clip_frame.hash != null) "clip body should be CAS-stored, hash populated"
+
+let live_state = .cat | projection project
+let stack = $live_state.stacks | where id == $stack_id | first
+assert ($stack.name == "Inbox")
+assert (($stack.clips | length) == 1)
+print "   ok"
+
+print "9. stacks module: meta builders produce the documented shapes"
+let a = stack add "Inbox" --sort manual
+assert ($a == {topic: "stack.add" ttl: "forever" meta: {name: "Inbox" sort: "manual"}})
+
+let b = stack update "s1" --name "Renamed"
+assert ($b.topic == "stack.update")
+assert ($b.meta == {id: "s1" name: "Renamed"}) "stack update should omit unset fields"
+
+let c = stack delete "s1"
+assert ($c == {topic: "stack.delete" ttl: "forever" meta: {id: "s1"}})
+
+let d = "the body" | clip add "s2" --mime-type "text/plain" --position "am"
+assert ($d.topic == "clip.add")
+assert ($d.ttl == "forever")
+assert ($d.meta == {stack_id: "s2" mime_type: "text/plain" position: "am"})
+assert ($d.body == "the body") "clip add captures piped body"
+
+let d2 = clip add "s2"  # defaults: mime_type=text/plain, no position, body=null
+assert ($d2.meta == {stack_id: "s2" mime_type: "text/plain"})
+
+let e = clip move "c1" --to-stack "s2" --position "z"
+assert ($e == {topic: "clip.move" ttl: "forever" meta: {id: "c1" stack_id: "s2" position: "z"}})
+
+let e2 = clip move "c1" --position "n"
+assert ($e2.meta == {id: "c1" position: "n"}) "clip move can reposition without changing stack"
+
+let f = clip delete "c1"
+assert ($f == {topic: "clip.delete" ttl: "forever" meta: {id: "c1"}})
+
+let g = stack select "s1"
+assert ($g == {topic: "stack.select" ttl: "ephemeral" meta: {id: "s1"}})
+
+let g2 = stack select --down
+assert ($g2.meta == {action: "down"})
+assert ($g2.ttl == "ephemeral")
+
+let h = clip select --up
+assert ($h == {topic: "clip.select" ttl: "ephemeral" meta: {action: "up"}})
+print "   ok"
+
+print "10. stacks module: builder errors when underspecified"
+let err1 = try { stack select } catch {|e| $e.msg }
+assert ($err1 | str contains "id or --down/--up")
+let err2 = try { clip move "c1" } catch {|e| $e.msg }
+assert ($err2 | str contains "--to-stack")
+print "   ok"
+
+print "11. stacks module: append writes through xs and pairs with projection"
+stack add "From module" --sort auto | send | ignore
+let mod_stack = .cat | where topic == "stack.add" | last  # newest
+assert ($mod_stack.meta.name == "From module")
+
+# Add a clip via the module, then verify projection sees it.
+"hello via module" | clip add $mod_stack.id --mime-type "text/plain" | send | ignore
+let projected = .cat | projection project
+let s = $projected.stacks | where id == $mod_stack.id | first
+assert (($s.clips | length) == 1)
+let c = $s.clips | first
+assert ($c.mime_type == "text/plain")
+assert ($c.hash != null) "clip body should be CAS-stored"
+
+# Selection — ephemeral frames aren't persisted, but `send` returns the
+# appended frame so we can verify topic + meta were what the protocol expects.
+let sel_frame = stack select $mod_stack.id | send
+assert ($sel_frame.topic == "stack.select")
+assert ($sel_frame.meta.id == $mod_stack.id)
+print "   ok"
+
+print "\nAll tests passed."

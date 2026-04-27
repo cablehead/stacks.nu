@@ -1,0 +1,56 @@
+/* Minimal element-level skin on top of Stellar tokens.
+ * Stellar ships only :root variables — this fills in the gaps so semantic
+ * markup (button/ul/kbd/pre/etc.) renders sensibly without per-element classes.
+ */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--neutral-1);
+  color: var(--neutral-1-on);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-0);
+  line-height: var(--font-line-height-0);
+  overflow: hidden;
+}
+
+a {
+  color: var(--primary-5);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+a:hover { color: var(--primary-6); }
+
+button {
+  font: inherit;
+  color: inherit;
+}
+button:hover { background: var(--neutral-2-dim); }
+button:focus-visible {
+  outline: 2px solid var(--primary-4);
+  outline-offset: -2px;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--font-size--1);
+  background: var(--neutral-2);
+  color: var(--neutral-2-on);
+  padding: .05rem .35rem;
+  border-radius: var(--border-radius-1);
+  border: 1px solid var(--neutral-3);
+}
+
+pre, code {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: var(--primary-3);
+  color: var(--primary-3-on);
+}
