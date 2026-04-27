@@ -9,14 +9,18 @@
 #   clip.delete  meta: {id}
 #
 # Ephemeral selection topics (TTL=ephemeral; replay window is "live only"):
-#   stack.select meta: {action: "down"|"up"} | {id}
-#   clip.select  meta: {action: "down"|"up"} | {id}
+#   stack.select  meta: {action: "down"|"up"} | {id}
+#   clip.select   meta: {action: "down"|"up"} | {id}
+#   compose.open  meta: {stack_id}                  # enter compose mode
+#   compose.close meta: {}                          # exit compose mode
 #
 # State shape:
 #   {
 #     stacks: [{id, name, sort, clips: [{id, hash, mime_type, position}]}]
 #     selectedStackId: string|null
 #     selectedClipId:  string|null
+#     composing:       bool
+#     composeStackId:  string|null
 #     frameId:         string|null   # id of the last frame that produced this state
 #   }
 #
@@ -24,7 +28,7 @@
 # render order: auto = id desc (newest first), manual = position asc.
 
 export def empty []: nothing -> record {
-  {stacks: [] selectedStackId: null selectedClipId: null frameId: null}
+  {stacks: [] selectedStackId: null selectedClipId: null composing: false composeStackId: null frameId: null}
 }
 
 export def sorted-clips [stack: record]: nothing -> list {
@@ -45,6 +49,8 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
     "clip.delete" => (clip-delete $state $frame)
     "stack.select" => (stack-select $state $frame)
     "clip.select" => (clip-select $state $frame)
+    "compose.open" => ($state | update composing true | update composeStackId ($frame.meta?.stack_id?))
+    "compose.close" => ($state | update composing false | update composeStackId null)
     _ => $state
   }
   $s | update frameId ($frame.id? | default $s.frameId)

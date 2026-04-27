@@ -30,12 +30,16 @@ def view-model [state: record]: nothing -> record {
   let raw_clips = if $stack == null { [] } else { projection sorted-clips $stack }
   let clips = $raw_clips | each {|c| hydrate-clip $c }
   let selected = $clips | where id == $state.selectedClipId | get -i 0
+  let compose_stack = $state.stacks | where id == $state.composeStackId | get -i 0
   {
     stacks: $state.stacks
     selectedStackId: $state.selectedStackId
     selectedClipId: $state.selectedClipId
     clips: $clips
     selectedClip: $selected
+    composing: $state.composing
+    composeStackId: $state.composeStackId
+    composeStackName: (if $compose_stack == null { "" } else { $compose_stack.name })
   }
 }
 
@@ -88,6 +92,32 @@ def index-page []: nothing -> any {
     })
     (route {method: "POST" path-matches: "/select/clip/:id"} {|req ctx|
       .append clip.select --meta {id: $ctx.id} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+
+    # ---- compose (ephemeral modal mode) ----
+    (route {method: "POST" path: "/compose/open"} {|req ctx|
+      let state = .cat | projection project
+      if $state.selectedStackId == null {
+        "no stack selected" | metadata set { merge {'http.response': {status: 400}} }
+      } else {
+        .append compose.open --meta {stack_id: $state.selectedStackId} --ttl ephemeral | ignore
+        "" | metadata set { merge {'http.response': {status: 204}} }
+      }
+    })
+    (route {method: "POST" path: "/compose/cancel"} {|req ctx|
+      .append compose.close --meta {} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+    (route {method: "POST" path: "/compose/submit"} {|req ctx|
+      let body = $in | from json
+      let text = $body.compose?.text? | default ""
+      let state = .cat | projection project
+      let target = $state.composeStackId
+      if (not ($text | str trim | is-empty)) and ($target != null) {
+        $text | .append clip.add --meta {stack_id: $target mime_type: "text/plain"} | ignore
+      }
+      .append compose.close --meta {} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 

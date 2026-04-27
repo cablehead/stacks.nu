@@ -71,6 +71,21 @@ let final = $outs | last
 assert (($final.stacks | where id == "s2" | first | get clips | length) == 2)
 print "   ok"
 
+print "5b. compose.open / compose.close toggle composing + composeStackId"
+let opened = $FRAMES | append [
+  {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
+] | projection project
+assert ($opened.composing == true)
+assert ($opened.composeStackId == "s2")
+
+let closed = $FRAMES | append [
+  {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
+  {topic: "compose.close" id: "y" hash: null meta: {}}
+] | projection project
+assert ($closed.composing == false)
+assert ($closed.composeStackId == null)
+print "   ok"
+
 print "6. apply-frame: ignores unknown topics"
 let s = projection empty
 let out = projection apply-frame $s {topic: "xs.pulse" id: "p" hash: null meta: null}
