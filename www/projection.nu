@@ -19,7 +19,7 @@
 #     stacks: [{id, name, sort, clips: [{id, hash, mime_type, position}]}]
 #     selectedStackId: string|null
 #     selectedClipId:  string|null
-#     composing:       bool
+#     mode:            "main" | "compose"  # active UI mode (compose, etc.)
 #     composeStackId:  string|null
 #     frameId:         string|null   # id of the last frame that produced this state
 #   }
@@ -28,7 +28,7 @@
 # render order: auto = id desc (newest first), manual = position asc.
 
 export def empty []: nothing -> record {
-  {stacks: [] selectedStackId: null selectedClipId: null composing: false composeStackId: null frameId: null}
+  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null frameId: null}
 }
 
 export def sorted-clips [stack: record]: nothing -> list {
@@ -49,8 +49,8 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
     "clip.delete" => (clip-delete $state $frame)
     "stack.select" => (stack-select $state $frame)
     "clip.select" => (clip-select $state $frame)
-    "compose.open" => ($state | update composing true | update composeStackId ($frame.meta?.stack_id?))
-    "compose.close" => ($state | update composing false | update composeStackId null)
+    "compose.open" => ($state | update mode "compose" | update composeStackId ($frame.meta?.stack_id?))
+    "compose.close" => ($state | update mode "main" | update composeStackId null)
     _ => $state
   }
   $s | update frameId ($frame.id? | default $s.frameId)

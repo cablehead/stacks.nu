@@ -1,14 +1,5 @@
 <main
-  {% if composing %}
-  data-on-keys:cmd-enter="fetch('/compose/submit/{{ composeStackId }}', {method: 'POST', body: document.getElementById('compose-text').value})"
-  data-on-keys:escape="@post('/compose/cancel')"
-  {% else %}
-  data-on-keys:j="@post('/select/clip/down')"
-  data-on-keys:k="@post('/select/clip/up')"
-  data-on-keys:ctrl-j="@post('/select/stack/down')"
-  data-on-keys:ctrl-k="@post('/select/stack/up')"
-  data-on-keys:c="@post('/compose/open')"
-  {% endif %}
+  data-keymap='{{ keymap | safe }}'
   style="
     display: grid;
     grid-template-columns: 14rem 18rem 1fr;
@@ -146,7 +137,7 @@
     {% endif %}
   </article>
 
-  {% if composing %}
+  {% if mode == "compose" %}
   <div role="dialog" aria-modal="true" style="
     position: fixed;
     inset: 0;

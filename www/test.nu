@@ -89,18 +89,18 @@ let manual = $FRAMES | append [
 assert ($manual.selectedClipId == "c3") $"manual should not bump, got ($manual.selectedClipId)"
 print "   ok"
 
-print "5b. compose.open / compose.close toggle composing + composeStackId"
+print "5b. compose.open / compose.close toggle mode + composeStackId"
 let opened = $FRAMES | append [
   {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
 ] | projection project
-assert ($opened.composing == true)
+assert ($opened.mode == "compose")
 assert ($opened.composeStackId == "s2")
 
 let closed = $FRAMES | append [
   {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
   {topic: "compose.close" id: "y" hash: null meta: {}}
 ] | projection project
-assert ($closed.composing == false)
+assert ($closed.mode == "main")
 assert ($closed.composeStackId == null)
 print "   ok"
 
@@ -115,7 +115,7 @@ print "7. serve.nu: GET / returns the bootstrap HTML"
 let handler = source ($script_dir | path join serve.nu)
 let response = do $handler {method: "GET" path: "/" headers: {} query: {}}
 assert ($response | str contains "<main>") "page should include the <main> mount point"
-assert ($response | str contains "datastar-on-keys") "page should load the on-keys plugin"
+assert ($response | str contains "/keys.js") "page should load the keymap handler"
 assert ($response | str contains "/updates") "page should bootstrap the SSE stream"
 print "   ok"
 
@@ -210,6 +210,35 @@ assert ($c.hash != null) "clip body should be CAS-stored"
 let sel_frame = stack select $mod_stack.id | send
 assert ($sel_frame.topic == "stack.select")
 assert ($sel_frame.meta.id == $mod_stack.id)
+print "   ok"
+
+print "12. serve.nu: POST /stacks/new creates a timestamped stack and selects it"
+do $handler {method: "POST" path: "/stacks/new" headers: {} query: {}}
+let new_stacks = .cat | where topic == "stack.add" | get meta.name
+let stamped = $new_stacks | where {|n| $n =~ '^\d{4}-\d{2}-\d{2}'} | get -i 0
+assert ($stamped != null) "/stacks/new should produce a YYYY-MM-DD HH:MM name"
+print "   ok"
+
+print "13. serve.nu: three-pane render emits data-keymap with the active mode's keys"
+let template = "/root/stacks.nu/www/templates/three-pane.html.j2"
+let main_view = {
+  stacks: [{id: "s1" name: "x" sort: "auto" clips: []}]
+  selectedStackId: "s1" selectedClipId: null
+  clips: [] selectedClip: null
+  mode: "main" composeStackId: null composeStackName: ""
+  keymap: '{"j":"/select/clip/down","shift+n":"/stacks/new"}'
+}
+let main_render = $main_view | .mj $template
+assert ($main_render | str contains 'data-keymap=') "main render should expose data-keymap"
+assert ($main_render | str contains '/stacks/new') "main keymap should include /stacks/new"
+
+let compose_view = $main_view
+  | update mode "compose"
+  | update composeStackId "s1" | update composeStackName "x"
+  | update keymap '{"escape":"/compose/cancel","cmd+enter":{"url":"/compose/submit/s1","source":"#compose-text"}}'
+let compose_render = $compose_view | .mj $template
+assert ($compose_render | str contains 'compose-text') "compose render should include the textarea"
+assert ($compose_render | str contains '/compose/submit/s1') "compose keymap should target the stack"
 print "   ok"
 
 print "\nAll tests passed."

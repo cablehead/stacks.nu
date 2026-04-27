@@ -6,11 +6,8 @@
   <title>stacks.nu</title>
   <link rel="stylesheet" href="http://localhost:7331/assets/css/stellar" />
   <link rel="stylesheet" href="/base.css" />
-  <script type="importmap">
-    { "imports": { "datastar": "{{ datastar_js_path | safe }}" } }
-  </script>
   <script type="module" src="{{ datastar_js_path }}"></script>
-  <script type="module" src="/datastar-on-keys.js"></script>
+  <script src="/keys.js"></script>
 </head>
 <body data-init="@get('/updates')">
   <main>loading...</main>

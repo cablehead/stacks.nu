@@ -24,6 +24,27 @@ def hydrate-clip [clip: record]: nothing -> record {
   $clip | insert preview $preview | insert body $body
 }
 
+# Per-mode keymap: combo string -> URL or {url, source} record.
+# `source` is a CSS selector; the matched element's `.value` is sent as the
+# POST body.
+def keymap-for [mode: string, ctx: record]: nothing -> string {
+  let map = match $mode {
+    "compose" => {
+      "escape": "/compose/cancel"
+      "cmd+enter": {url: $"/compose/submit/($ctx.composeStackId)" source: "#compose-text"}
+    }
+    _ => {
+      "j": "/select/clip/down"
+      "k": "/select/clip/up"
+      "shift+j": "/select/stack/down"
+      "shift+k": "/select/stack/up"
+      "n": "/compose/open"
+      "shift+n": "/stacks/new"
+    }
+  }
+  $map | to json -r
+}
+
 # Take the projection state and turn it into the template's view model.
 def view-model [state: record]: nothing -> record {
   let stack = $state.stacks | where id == $state.selectedStackId | get -i 0
@@ -37,9 +58,10 @@ def view-model [state: record]: nothing -> record {
     selectedClipId: $state.selectedClipId
     clips: $clips
     selectedClip: $selected
-    composing: $state.composing
+    mode: $state.mode
     composeStackId: $state.composeStackId
     composeStackName: (if $compose_stack == null { "" } else { $compose_stack.name })
+    keymap: (keymap-for $state.mode {composeStackId: $state.composeStackId})
   }
 }
 
@@ -117,6 +139,14 @@ def index-page []: nothing -> any {
     })
 
     # ---- mutations ----
+    (route {method: "POST" path: "/stacks/new"} {|req ctx|
+      # Bare-keymap action: create a stack with a default timestamp name and
+      # select it. Rename comes via PATCH /stacks/:id.
+      let name = date now | format date "%Y-%m-%d %H:%M"
+      let frame = .append stack.add --meta {name: $name sort: "auto"}
+      .append stack.select --meta {id: $frame.id} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
     (route {method: "POST" path: "/stacks"} {|req ctx|
       let body = $in | from json
       let meta = {
