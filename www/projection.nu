@@ -119,7 +119,7 @@ def clip-add [state: record, frame: record] {
       $s
     }
   }
-  # In auto-sort stacks, a new clip is the new top — bump selection to it
+  # In auto-sort stacks, a new clip is the new top -- bump selection to it
   # when it lands in the currently-selected stack.
   let target = $stacks | where id == $stack_id | get -i 0
   let bump = ($target != null) and ($target.sort == "auto") and ($state.selectedStackId == $stack_id)

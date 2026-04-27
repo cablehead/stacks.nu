@@ -13,7 +13,7 @@
 #
 # All builders are pure (no store access). `append` is the only side effect.
 
-# ─── stacks ──────────────────────────────────────────────────────────────────
+# --- stacks ------------------------------------------------------------------
 
 export def "stack add" [
   name: string
@@ -37,7 +37,7 @@ export def "stack delete" [id: string]: nothing -> record {
   {topic: "stack.delete" ttl: "forever" meta: {id: $id}}
 }
 
-# Selection — id wins over --down/--up. At least one must be supplied.
+# Selection: id wins over --down/--up. At least one must be supplied.
 export def "stack select" [
   id?: string
   --down
@@ -47,7 +47,7 @@ export def "stack select" [
   {topic: "stack.select" ttl: "ephemeral" meta: $meta}
 }
 
-# ─── clips ───────────────────────────────────────────────────────────────────
+# --- clips -------------------------------------------------------------------
 
 
 # Body bytes (piped in) become the clip's content; xs CAS-stores them.
@@ -91,10 +91,10 @@ export def "clip select" [
   {topic: "clip.select" ttl: "ephemeral" meta: $meta}
 }
 
-# ─── writer ──────────────────────────────────────────────────────────────────
+# --- writer ------------------------------------------------------------------
 
 # Pipe a frame request into the store. Requires the xs store commands
-# (`.append`) to be in scope — i.e. an `http-nu --store …` context.
+# (`.append`) to be in scope -- i.e. an `http-nu --store ...` context.
 export def send []: record -> record {
   let req = $in
   let body = $req.body? | default null

@@ -1,5 +1,5 @@
 /* Minimal element-level skin on top of Stellar tokens.
- * Stellar ships only :root variables — this fills in the gaps so semantic
+ * Stellar ships only :root variables -- this fills in the gaps so semantic
  * markup (button/ul/kbd/pre/etc.) renders sensibly without per-element classes.
  */
 

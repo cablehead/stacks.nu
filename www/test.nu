@@ -73,14 +73,14 @@ print "   ok"
 
 print "5a. clip.add into the selected auto stack bumps selection to the new clip"
 # After all FRAMES, s1 is empty (sort=auto) with no selected clip.
-# Re-select s1 explicitly, then add a new clip — selection should jump to it.
+# Re-select s1 explicitly, then add a new clip -- selection should jump to it.
 let bumped = $FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {id: "s1"}}
   {topic: "clip.add"     id: "c9" hash: "sha256-zzz" meta: {stack_id: "s1" mime_type: "text/plain"}}
 ] | projection project
 assert ($bumped.selectedClipId == "c9") $"auto bump expected c9, got ($bumped.selectedClipId)"
 
-# Manual stack: no bump — user-curated order isn't disrupted.
+# Manual stack: no bump -- user-curated order isn't disrupted.
 let manual = $FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {id: "s2"}}
   {topic: "clip.select"  id: "x" hash: null meta: {id: "c3"}}
@@ -107,7 +107,7 @@ print "   ok"
 print "6. apply-frame: ignores unknown topics"
 let s = projection empty
 let out = projection apply-frame $s {topic: "xs.pulse" id: "p" hash: null meta: null}
-# unknown topics still update frameId — strip it before comparing
+# unknown topics still update frameId -- strip it before comparing
 assert (($out | reject frameId) == ($s | reject frameId))
 print "   ok"
 
@@ -205,7 +205,7 @@ let c = $s.clips | first
 assert ($c.mime_type == "text/plain")
 assert ($c.hash != null) "clip body should be CAS-stored"
 
-# Selection — ephemeral frames aren't persisted, but `send` returns the
+# Selection: ephemeral frames aren't persisted, but `send` returns the
 # appended frame so we can verify topic + meta were what the protocol expects.
 let sel_frame = stack select $mod_stack.id | send
 assert ($sel_frame.topic == "stack.select")
