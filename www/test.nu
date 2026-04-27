@@ -71,6 +71,24 @@ let final = $outs | last
 assert (($final.stacks | where id == "s2" | first | get clips | length) == 2)
 print "   ok"
 
+print "5a. clip.add into the selected auto stack bumps selection to the new clip"
+# After all FRAMES, s1 is empty (sort=auto) with no selected clip.
+# Re-select s1 explicitly, then add a new clip — selection should jump to it.
+let bumped = $FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "s1"}}
+  {topic: "clip.add"     id: "c9" hash: "sha256-zzz" meta: {stack_id: "s1" mime_type: "text/plain"}}
+] | projection project
+assert ($bumped.selectedClipId == "c9") $"auto bump expected c9, got ($bumped.selectedClipId)"
+
+# Manual stack: no bump — user-curated order isn't disrupted.
+let manual = $FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "s2"}}
+  {topic: "clip.select"  id: "x" hash: null meta: {id: "c3"}}
+  {topic: "clip.add"     id: "c8" hash: "sha256-yyy" meta: {stack_id: "s2" mime_type: "text/plain" position: "z"}}
+] | projection project
+assert ($manual.selectedClipId == "c3") $"manual should not bump, got ($manual.selectedClipId)"
+print "   ok"
+
 print "5b. compose.open / compose.close toggle composing + composeStackId"
 let opened = $FRAMES | append [
   {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
