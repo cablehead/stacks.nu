@@ -189,7 +189,8 @@ def cycle [ids: list, current: any, action: string]: nothing -> any {
 }
 
 def stack-select [state: record, frame: record] {
-  let stack_ids = $state.stacks | get id
+  # Cycle in the same order the UI renders: most-recently-touched first.
+  let stack_ids = $state.stacks | sort-by lastTouched | reverse | get id
   let new_id = if ($frame.meta?.id? != null) {
     if ($frame.meta.id in $stack_ids) { $frame.meta.id } else { $state.selectedStackId }
   } else {

@@ -13,9 +13,9 @@ const FRAMES = [
   {topic: "clip.add"     id: "c1" hash: "sha256-aaa" meta: {stack_id: "s1" mime_type: "text/plain"}}
   {topic: "clip.add"     id: "c2" hash: "sha256-bbb" meta: {stack_id: "s1" mime_type: "text/plain"}}
   {topic: "clip.add"     id: "c3" hash: "sha256-ccc" meta: {stack_id: "s2" mime_type: "image/png" position: "a"}}
-  {topic: "stack.update" id: "x"  hash: null meta: {id: "s1" name: "Recent"}}
-  {topic: "clip.move"    id: "x"  hash: null meta: {id: "c1" stack_id: "s2" position: "am"}}
-  {topic: "clip.delete"  id: "x"  hash: null meta: {id: "c2"}}
+  {topic: "stack.update" id: "u1" hash: null meta: {id: "s1" name: "Recent"}}
+  {topic: "clip.move"    id: "u2" hash: null meta: {id: "c1" stack_id: "s2" position: "am"}}
+  {topic: "clip.delete"  id: "u3" hash: null meta: {id: "c2"}}
 ]
 
 print "1. project: end-to-end fold over synthetic frames"
@@ -107,6 +107,19 @@ let renamed_state = [
   {topic: "stack.update" id: "a4" hash: null meta: {id: "a1" name: "Renamed"}}
 ] | projection project
 assert (($renamed_state.stacks | where id == "a1" | first | get lastTouched) == "a4") "rename should bump a1"
+print "   ok"
+
+print "5d. stack.select cycle follows lastTouched order, not insertion order"
+# a1, a2 created; clip lands in a1 -> a1 is newest. Selection starts on a1
+# (the rendered top). Pressing 'down' should land on a2 (next in render order),
+# not on a1 (insertion-order next-after-a1).
+let cycled = [
+  {topic: "stack.add" id: "a1" hash: null meta: {name: "First"  sort: "auto"}}
+  {topic: "stack.add" id: "a2" hash: null meta: {name: "Second" sort: "auto"}}
+  {topic: "clip.add"  id: "a3" hash: "x" meta: {stack_id: "a1" mime_type: "text/plain"}}
+  {topic: "stack.select" id: "a4" hash: null meta: {action: "down"}}
+] | projection project
+assert ($cycled.selectedStackId == "a2") $"cycle should follow render order; got ($cycled.selectedStackId)"
 print "   ok"
 
 print "5b. compose.open / compose.close toggle mode + composeStackId"
