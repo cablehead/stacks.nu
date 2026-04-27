@@ -61,9 +61,7 @@ def index-page []: nothing -> any {
     (route {method: "GET" path: "/"} {|req ctx| index-page })
 
     (route {method: "GET" path: "/updates"} {|req ctx|
-      # `-p` enables xs.threshold + xs.pulse heartbeats; the projection
-      # filters pulse out, but threshold is what flips us into "live" mode.
-      .cat -f -p 5000
+      .cat -f
       | projection project-stream
       | each {|s| render-event $s }
       | to sse
