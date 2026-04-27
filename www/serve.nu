@@ -24,39 +24,53 @@ def hydrate-clip [clip: record]: nothing -> record {
   $clip | insert preview $preview | insert body $body
 }
 
-# Per-mode keymap: combo string -> URL or {url, source} record.
-# `source` is a CSS selector; the matched element's `.value` is sent as the
-# POST body.
-def keymap-for [mode: string, ctx: record]: nothing -> string {
-  let map = match $mode {
-    "compose" => {
-      "escape": "/compose/cancel"
-      "cmd+enter": {url: $"/compose/submit/($ctx.composeStackId)" source: "#compose-text"}
-    }
-    "edit" => {
-      "escape": "/editor/cancel"
-      "cmd+enter": {url: $"/editor/submit/($ctx.editClipId)" source: "#compose-text"}
-    }
+# Single source of truth for "what keys exist in this mode" -- drives both
+# the data-keymap (for keys.js) and the status bar (for the user). Each
+# binding has a combo string (matching keys.js's `cmd+ctrl+alt+shift+key`
+# normalization), a short label, key glyphs for the status bar, and the
+# action (URL string or {url, source} record).
+def bindings-for [mode: string, ctx: record]: nothing -> list {
+  match $mode {
+    "compose" => [
+      {combo: "cmd+enter" label: "save"   keys: ["Cmd" "Enter"] action: {url: $"/compose/submit/($ctx.composeStackId)" source: "#compose-text"}}
+      {combo: "escape"    label: "cancel" keys: ["Esc"]         action: "/compose/cancel"}
+    ]
+    "edit" => [
+      {combo: "cmd+enter" label: "save"   keys: ["Cmd" "Enter"] action: {url: $"/editor/submit/($ctx.editClipId)" source: "#compose-text"}}
+      {combo: "escape"    label: "cancel" keys: ["Esc"]         action: "/editor/cancel"}
+    ]
     _ => {
-      let base = {
-        "j": "/select/clip/down"
-        "k": "/select/clip/up"
-        "shift+j": "/select/stack/down"
-        "shift+k": "/select/stack/up"
-        "shift+n": "/stacks/new"
-      }
+      let core = [
+        {combo: "j"       label: "next clip"   keys: ["J"]         action: "/select/clip/down"}
+        {combo: "k"       label: "prev clip"   keys: ["K"]         action: "/select/clip/up"}
+        {combo: "shift+j" label: "next stack"  keys: ["Shift" "J"] action: "/select/stack/down"}
+        {combo: "shift+k" label: "prev stack"  keys: ["Shift" "K"] action: "/select/stack/up"}
+        {combo: "shift+n" label: "new stack"   keys: ["Shift" "N"] action: "/stacks/new"}
+      ]
       # `n` and `e` only bind when there's a target -- the URL carries the
       # id so handlers don't re-derive from ephemeral state (which a fresh
       # `.cat` snapshot can't see).
       let with_n = if $ctx.selectedStackId != null {
-        $base | upsert n $"/compose/open/($ctx.selectedStackId)"
-      } else { $base }
+        $core | append {combo: "n" label: "new clip" keys: ["N"] action: $"/compose/open/($ctx.selectedStackId)"}
+      } else { $core }
       if $ctx.selectedClipId != null {
-        $with_n | upsert e $"/editor/open/($ctx.selectedClipId)"
+        $with_n | append {combo: "e" label: "edit clip" keys: ["E"] action: $"/editor/open/($ctx.selectedClipId)"}
       } else { $with_n }
     }
   }
-  $map | to json -r
+}
+
+def mode-name-for [mode: string, ctx: record]: nothing -> string {
+  match $mode {
+    "compose" => $"New clip in ($ctx.composeStackName)"
+    "edit" => $"Edit clip in ($ctx.editStackName)"
+    _ => "Stacks"
+  }
+}
+
+# Pack the bindings list into the `{combo: action}` json that keys.js reads.
+def keymap-for [bindings: list]: nothing -> string {
+  $bindings | reduce -f {} {|b, acc| $acc | upsert $b.combo $b.action } | to json -r
 }
 
 # Locate a clip across all stacks; returns {clip, stackName} or null.
@@ -78,6 +92,17 @@ def view-model [state: record]: nothing -> record {
   let compose_stack = $state.stacks | where id == $state.composeStackId | get -i 0
   let edit_target = find-clip $state $state.editClipId
   let edit_clip = if $edit_target == null { null } else { hydrate-clip $edit_target.clip }
+  let compose_name = if $compose_stack == null { "" } else { $compose_stack.name }
+  let edit_name = if $edit_target == null { "" } else { $edit_target.stackName }
+  let ctx = {
+    composeStackId: $state.composeStackId
+    composeStackName: $compose_name
+    editClipId: $state.editClipId
+    editStackName: $edit_name
+    selectedStackId: $state.selectedStackId
+    selectedClipId: $state.selectedClipId
+  }
+  let bindings = bindings-for $state.mode $ctx
   # Stacks ordered by recent activity (any event touching the stack or its clips).
   let stacks_sorted = $state.stacks | sort-by lastTouched | reverse
   {
@@ -87,17 +112,14 @@ def view-model [state: record]: nothing -> record {
     clips: $clips
     selectedClip: $selected
     mode: $state.mode
+    modeName: (mode-name-for $state.mode $ctx)
     composeStackId: $state.composeStackId
-    composeStackName: (if $compose_stack == null { "" } else { $compose_stack.name })
+    composeStackName: $compose_name
     editClipId: $state.editClipId
     editClip: $edit_clip
-    editStackName: (if $edit_target == null { "" } else { $edit_target.stackName })
-    keymap: (keymap-for $state.mode {
-      composeStackId: $state.composeStackId
-      editClipId: $state.editClipId
-      selectedStackId: $state.selectedStackId
-      selectedClipId: $state.selectedClipId
-    })
+    editStackName: $edit_name
+    bindings: $bindings
+    keymap: (keymap-for $bindings)
   }
 }
 

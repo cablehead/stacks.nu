@@ -1,8 +1,8 @@
 <main
   data-keymap='{{ keymap | safe }}'
   style="
-    display: grid;
-    grid-template-columns: 14rem 18rem 1fr;
+    display: flex;
+    flex-direction: column;
     height: 100dvh;
     background: var(--neutral-1);
     color: var(--neutral-1-on);
@@ -10,6 +10,12 @@
     font-size: var(--font-size-0);
   "
 >
+  <div style="
+    display: grid;
+    grid-template-columns: 14rem 18rem 1fr;
+    flex: 1;
+    min-height: 0;
+  ">
   <aside aria-label="Stacks" style="
     overflow-y: auto;
     border-right: 1px solid var(--neutral-3);
@@ -139,6 +145,29 @@
       <p style="color: var(--neutral-2-dim);">Nothing selected.</p>
     {% endif %}
   </article>
+  </div>
+
+  <footer aria-label="Status" style="
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: .25rem .75rem;
+    background: var(--neutral-2);
+    border-top: 1px solid var(--neutral-3);
+    font-size: var(--font-size--2);
+    color: var(--neutral-2-on);
+  ">
+    <span style="font-weight: var(--font-weight-medium);">{{ modeName }}</span>
+    <span style="display: flex; gap: .9rem; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+      {% for b in bindings %}
+        <span>
+          {% for k in b.keys %}<kbd>{{ k }}</kbd>{% if not loop.last %}<span style="opacity:.5;">+</span>{% endif %}{% endfor %}
+          <span style="opacity: .75; margin-left: .25rem;">{{ b.label }}</span>
+        </span>
+      {% endfor %}
+    </span>
+  </footer>
 
   {% if mode == "compose" or mode == "edit" %}
   <div role="dialog" aria-modal="true" style="

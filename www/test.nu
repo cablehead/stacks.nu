@@ -351,26 +351,42 @@ assert ($live_clip.position == "a") "manual position survives"
 assert ($live_clip.hash == ($updates | first | get hash)) "projection tracks the latest hash"
 print "   ok"
 
-print "13. serve.nu: three-pane render emits data-keymap with the active mode's keys"
+print "13. serve.nu: render emits data-keymap and a status bar that morphs per mode"
 let template = "/root/stacks.nu/www/templates/three-pane.html.j2"
 let main_view = {
   stacks: [{id: "s1" name: "x" sort: "auto" clips: []}]
   selectedStackId: "s1" selectedClipId: null
   clips: [] selectedClip: null
-  mode: "main" composeStackId: null composeStackName: ""
+  mode: "main" modeName: "Stacks"
+  composeStackId: null composeStackName: ""
+  editClipId: null editClip: null editStackName: ""
+  bindings: [
+    {combo: "j"       label: "next clip" keys: ["J"]         action: "/select/clip/down"}
+    {combo: "shift+n" label: "new stack" keys: ["Shift" "N"] action: "/stacks/new"}
+  ]
   keymap: '{"j":"/select/clip/down","shift+n":"/stacks/new"}'
 }
 let main_render = $main_view | .mj $template
 assert ($main_render | str contains 'data-keymap=') "main render should expose data-keymap"
-assert ($main_render | str contains '/stacks/new') "main keymap should include /stacks/new"
+assert ($main_render | str contains '/stacks/new') "keymap should include /stacks/new"
+assert ($main_render | str contains '<footer aria-label="Status"') "status footer should be present"
+assert ($main_render | str contains '>Stacks<') "status footer should show the mode name"
+assert ($main_render | str contains 'next clip') "status footer should list binding labels"
 
 let compose_view = $main_view
   | update mode "compose"
-  | update composeStackId "s1" | update composeStackName "x"
+  | update modeName "New clip in Inbox"
+  | update composeStackId "s1" | update composeStackName "Inbox"
+  | update bindings [
+      {combo: "cmd+enter" label: "save" keys: ["Cmd" "Enter"] action: {url: "/compose/submit/s1" source: "#compose-text"}}
+      {combo: "escape" label: "cancel" keys: ["Esc"] action: "/compose/cancel"}
+    ]
   | update keymap '{"escape":"/compose/cancel","cmd+enter":{"url":"/compose/submit/s1","source":"#compose-text"}}'
 let compose_render = $compose_view | .mj $template
 assert ($compose_render | str contains 'compose-text') "compose render should include the textarea"
 assert ($compose_render | str contains '/compose/submit/s1') "compose keymap should target the stack"
+assert ($compose_render | str contains '>New clip in Inbox<') "status footer should show compose mode name"
+assert ($compose_render | str contains 'save') "status footer should list compose actions"
 print "   ok"
 
 print "\nAll tests passed."
