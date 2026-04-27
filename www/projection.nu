@@ -60,7 +60,8 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
 # or when current selection has been deleted. Idempotent.
 export def reconcile-selection []: record -> record {
   let state = $in
-  let stack_ids = $state.stacks | get id
+  # Default selection follows render order: most-recently-touched first.
+  let stack_ids = $state.stacks | sort-by lastTouched | reverse | get id
   let sel_stack = if ($state.selectedStackId in $stack_ids) {
     $state.selectedStackId
   } else {

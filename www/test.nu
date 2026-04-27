@@ -109,6 +109,15 @@ let renamed_state = [
 assert (($renamed_state.stacks | where id == "a1" | first | get lastTouched) == "a4") "rename should bump a1"
 print "   ok"
 
+print "5e. default selection on startup is the most-recently-touched stack"
+let startup = [
+  {topic: "stack.add" id: "a1" hash: null meta: {name: "First"  sort: "auto"}}
+  {topic: "stack.add" id: "a2" hash: null meta: {name: "Second" sort: "auto"}}
+  {topic: "clip.add"  id: "a3" hash: "x" meta: {stack_id: "a2" mime_type: "text/plain"}}
+] | projection project
+assert ($startup.selectedStackId == "a2") $"expected a2, got ($startup.selectedStackId)"
+print "   ok"
+
 print "5d. stack.select cycle follows lastTouched order, not insertion order"
 # a1, a2 created; clip lands in a1 -> a1 is newest. Selection starts on a1
 # (the rendered top). Pressing 'down' should land on a2 (next in render order),
