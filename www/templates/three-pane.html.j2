@@ -110,7 +110,7 @@
   ">
     {% if selectedClip %}
       {% if selectedClip.mime_type == "image/png" or selectedClip.mime_type == "image/jpeg" %}
-        <img src="/clips/{{ selectedClip.id }}/content" alt="" style="max-width: 100%; height: auto; border-radius: var(--border-radius-1);" />
+        <img src="/clips/{{ selectedClip.versions[0] }}/content" alt="" style="max-width: 100%; height: auto; border-radius: var(--border-radius-1);" />
       {% else %}
         <pre style="
           margin: 0;
@@ -131,6 +131,9 @@
       ">
         {{ selectedClip.id }} | {{ selectedClip.mime_type }}
         {% if selectedClip.position %} | pos {{ selectedClip.position }}{% endif %}
+        {% if selectedClip.versions | length > 1 %}
+          | <a href="/clips/{{ selectedClip.versions[1] }}/content" target="_blank" style="color: inherit;">previous</a>
+        {% endif %}
       </footer>
     {% else %}
       <p style="color: var(--neutral-2-dim);">Nothing selected.</p>

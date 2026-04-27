@@ -19,7 +19,7 @@
 #
 # State shape:
 #   {
-#     stacks: [{id, name, sort, lastTouched, clips: [{id, hash, mime_type, position}]}]
+#     stacks: [{id, name, sort, lastTouched, clips: [{id, hash, mime_type, position, lastTouched, versions}]}]
 #     selectedStackId: string|null
 #     selectedClipId:  string|null
 #     mode:            "main" | "compose" | "edit"
@@ -29,7 +29,8 @@
 #   }
 #
 # `sort` is "auto" or "manual". `sorted-clips` returns a stack's clips in
-# render order: auto = id desc (newest first), manual = position asc.
+# render order: auto = lastTouched desc (newest activity first, so edits
+# float to the top), manual = position asc.
 
 export def empty []: nothing -> record {
   {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null selectionExplicit: false frameId: null}
@@ -39,7 +40,7 @@ export def sorted-clips [stack: record]: nothing -> list {
   if $stack.sort == "manual" {
     $stack.clips | sort-by {|c| [($c.position? | default "") $c.id]}
   } else {
-    $stack.clips | sort-by id | reverse
+    $stack.clips | sort-by lastTouched | reverse
   }
 }
 
@@ -125,6 +126,8 @@ def clip-add [state: record, frame: record] {
     hash: ($frame.hash?)
     mime_type: ($frame.meta?.mime_type? | default "text/plain")
     position: ($frame.meta?.position?)
+    lastTouched: $frame.id
+    versions: [$frame.id]
   }
   let stacks = $state.stacks | each {|s|
     if $s.id == $stack_id {
@@ -150,7 +153,12 @@ def clip-update [state: record, frame: record] {
   let stacks = $state.stacks | each {|s|
     if ($s.clips | any {|c| $c.id == $clip_id }) {
       let updated_clips = $s.clips | each {|c|
-        if $c.id == $clip_id { $c | update hash $new_hash } else { $c }
+        if $c.id == $clip_id {
+          $c
+            | update hash $new_hash
+            | update lastTouched $frame.id
+            | update versions ([$frame.id] | append $c.versions)
+        } else { $c }
       }
       $s | update clips $updated_clips | update lastTouched $frame.id
     } else {

@@ -151,7 +151,7 @@ let cycled = [
 assert ($cycled.selectedStackId == "a2") $"cycle should follow render order; got ($cycled.selectedStackId)"
 print "   ok"
 
-print "5g. clip.update swaps the clip's hash, keeps id stable, bumps stack lastTouched"
+print "5g. clip.update swaps hash, bumps clip+stack lastTouched, records versions"
 let edited = [
   {topic: "stack.add"   id: "a1" hash: null   meta: {name: "X" sort: "auto"}}
   {topic: "clip.add"    id: "c1" hash: "h1"   meta: {stack_id: "a1" mime_type: "text/plain"}}
@@ -161,7 +161,20 @@ let stack = $edited.stacks | first
 let live_clip = $stack.clips | first
 assert ($live_clip.id == "c1") "clip identity is stable across edits"
 assert ($live_clip.hash == "h2") $"hash should track the latest update; got ($live_clip.hash)"
+assert ($live_clip.lastTouched == "u1") "edit bumps clip lastTouched"
+assert ($live_clip.versions == ["u1" "c1"]) "versions list is most-recent-first"
 assert ($stack.lastTouched == "u1") "edit bumps the stack's lastTouched"
+
+# Render order in auto-sort follows clip lastTouched, so an edit floats
+# the older clip above a newer-but-untouched one.
+let two = [
+  {topic: "stack.add"   id: "a1" hash: null meta: {name: "X" sort: "auto"}}
+  {topic: "clip.add"    id: "c1" hash: "h1" meta: {stack_id: "a1" mime_type: "text/plain"}}
+  {topic: "clip.add"    id: "c2" hash: "h2" meta: {stack_id: "a1" mime_type: "text/plain"}}
+  {topic: "clip.update" id: "u9" hash: "h1b" meta: {id: "c1"}}
+] | projection project
+let order = projection sorted-clips ($two.stacks | first) | get id
+assert ($order == ["c1" "c2"]) $"edited c1 should bubble above c2 in auto-sort; got ($order)"
 print "   ok"
 
 print "5f. editor.open / editor.close toggle mode + editClipId"
