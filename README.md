@@ -9,6 +9,8 @@ The page holds no state. Selection, compose mode, the visible HTML — all
 projected on the server from frames in the event store and patched into
 `<main>` over SSE.
 
+https://github.com/user-attachments/assets/10d6b5e8-d6a3-4e4d-ba85-79c7a803b94b
+
 ## Run
 
 ```sh
