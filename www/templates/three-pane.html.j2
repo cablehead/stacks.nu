@@ -1,6 +1,6 @@
 <main
   {% if composing %}
-  data-on-keys:cmd-enter="@post('/compose/submit')"
+  data-on-keys:cmd-enter="fetch('/compose/submit/{{ composeStackId }}', {method: 'POST', body: document.getElementById('compose-text').value})"
   data-on-keys:escape="@post('/compose/cancel')"
   {% else %}
   data-on-keys:j="@post('/select/clip/down')"
@@ -178,8 +178,8 @@
         <span><kbd>⌘</kbd>+<kbd>↵</kbd> save · <kbd>esc</kbd> cancel</span>
       </header>
       <textarea
-        data-bind="$compose.text"
-        data-init="$compose = {text: ''}; el.focus()"
+        id="compose-text"
+        data-init="el.focus()"
         spellcheck="false"
         placeholder="Type your clip…"
         style="

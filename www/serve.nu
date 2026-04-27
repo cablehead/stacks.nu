@@ -109,13 +109,10 @@ def index-page []: nothing -> any {
       .append compose.close --meta {} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
-    (route {method: "POST" path: "/compose/submit"} {|req ctx|
-      let body = $in | from json
-      let text = $body.compose?.text? | default ""
-      let state = .cat | projection project
-      let target = $state.composeStackId
-      if (not ($text | str trim | is-empty)) and ($target != null) {
-        $text | .append clip.add --meta {stack_id: $target mime_type: "text/plain"} | ignore
+    (route {method: "POST" path-matches: "/compose/submit/:id"} {|req ctx|
+      let text = $in
+      if not ($text | str trim | is-empty) {
+        $text | .append clip.add --meta {stack_id: $ctx.id mime_type: "text/plain"} | ignore
       }
       .append compose.close --meta {} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
