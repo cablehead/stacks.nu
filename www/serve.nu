@@ -170,6 +170,48 @@ def render-event [state: record]: nothing -> record {
   {event: "datastar-patch-elements" data: $"selector main\n($elements)"}
 }
 
+def shots-page []: nothing -> any {
+  let dir = $script_dir | path join "static/shots"
+  let files = if ($dir | path exists) {
+    ls $dir | where ($it.name | str ends-with ".png") | get name | each {|p| $p | path basename } | sort
+  } else { [] }
+  (
+    HTML
+    (
+      HEAD
+      (META {charset: "utf-8"})
+      (TITLE "stacks.nu | screenshots")
+      (LINK {rel: "stylesheet" href: "http://localhost:7331/assets/css/stellar"})
+      (LINK {rel: "stylesheet" href: "/base.css"})
+    )
+    (
+      BODY {style: "padding: 1.5rem; background: var(--neutral-1); color: var(--neutral-1-on); font-family: var(--font-sans);"}
+      (H1 {style: "font-size: var(--font-size-2); margin: 0 0 1rem;"} "stacks.nu screenshots")
+      (P {style: "color: var(--neutral-2-dim); font-size: var(--font-size--1); margin: 0 0 1.5rem;"}
+        $"($files | length) pose"
+        (if ($files | length) == 1 { "" } else { "s" })
+        " in "
+        (CODE "www/static/shots/")
+      )
+      (if ($files | is-empty) {
+        (P {style: "color: var(--neutral-2-dim);"} "No shots yet. Run "
+          (CODE "scripts/shoot.py") " to bake some.")
+      } else {
+        (
+          DIV {style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1rem;"}
+          ($files | each {|f|
+            let slug = $f | str replace ".png" "" | str replace -a "-" " "
+            (FIGURE {style: "margin: 0; background: var(--neutral-2); border: 1px solid var(--neutral-3); border-radius: var(--border-radius-2); overflow: hidden;"}
+              (IMG {src: $"/shots/($f)" alt: $slug style: "width: 100%; display: block;"})
+              (FIGCAPTION {style: "padding: .5rem .75rem; font-family: var(--font-mono); font-size: var(--font-size--1); color: var(--neutral-2-on); border-top: 1px solid var(--neutral-3);"} $slug)
+            )
+          })
+        )
+      })
+    )
+  )
+}
+
 def index-page []: nothing -> any {
   # Path is fixed by `http-nu --datastar`; we hardcode it here so the page
   # is also renderable from `http-nu eval` (no --datastar; no $DATASTAR_JS_PATH).
@@ -196,6 +238,7 @@ def index-page []: nothing -> any {
 {|req|
   dispatch $req [
     (route {method: "GET" path: "/"} {|req ctx| index-page })
+    (route {method: "GET" path: "/shots"} {|req ctx| shots-page })
 
     (route {method: "GET" path: "/updates"} {|req ctx|
       .cat -f
