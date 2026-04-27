@@ -28,7 +28,7 @@
 # render order: auto = id desc (newest first), manual = position asc.
 
 export def empty []: nothing -> record {
-  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null frameId: null}
+  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null selectionExplicit: false frameId: null}
 }
 
 export def sorted-clips [stack: record]: nothing -> list {
@@ -62,7 +62,12 @@ export def reconcile-selection []: record -> record {
   let state = $in
   # Default selection follows render order: most-recently-touched first.
   let stack_ids = $state.stacks | sort-by lastTouched | reverse | get id
-  let sel_stack = if ($state.selectedStackId in $stack_ids) {
+  # Until the user explicitly picks a stack (via stack.select), the cursor
+  # tracks the most-active stack. Once they have, we preserve their choice
+  # and only fall back to the top when it's no longer valid.
+  let sel_stack = if (not $state.selectionExplicit) {
+    $stack_ids | get -i 0
+  } else if ($state.selectedStackId in $stack_ids) {
     $state.selectedStackId
   } else {
     $stack_ids | get -i 0
@@ -200,7 +205,10 @@ def stack-select [state: record, frame: record] {
   # Switching stacks resets clip selection to that stack's first clip.
   let stack = $state.stacks | where id == $new_id | get -i 0
   let first_clip = if $stack == null { null } else { sorted-clips $stack | get id | get -i 0 }
-  $state | update selectedStackId $new_id | update selectedClipId $first_clip
+  $state
+    | update selectedStackId $new_id
+    | update selectedClipId $first_clip
+    | update selectionExplicit true
 }
 
 def clip-select [state: record, frame: record] {
