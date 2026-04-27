@@ -182,14 +182,12 @@
       {% endfor %}
       <span style="font-weight: var(--font-weight-medium);">{{ modeName }}</span>
     </span>
-    <span style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+    <span style="display: flex; gap: .25rem; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
       {% for b in bindings %}
-        <span style="display: inline-flex; align-items: center; gap: .35rem;">
-          <span style="opacity: .75;">{{ b.label }}</span>
-          <span style="display: inline-flex; gap: .15rem;">
-            {% for k in b.keys %}<kbd>{{ k }}</kbd>{% endfor %}
-          </span>
-        </span>
+        <span
+          class="binding"
+          onmousedown="window.kx.fire('{{ b.combo | safe }}')"
+        ><span class="binding-label">{{ b.label }}</span><span class="binding-keys">{% for k in b.keys %}<kbd>{{ k }}</kbd>{% endfor %}</span></span>
       {% endfor %}
     </span>
   </footer>

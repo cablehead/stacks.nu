@@ -11,6 +11,10 @@
 // `<combo>` is built from the event in a fixed order: cmd, ctrl, alt, shift,
 // then the key. Letters are lowercased so `shift+j` matches Shift+J without
 // the upstream on-keys plugin's case-mismatch bug.
+//
+// `window.kx.fire(combo)` invokes a binding by its combo string. Used by
+// the status bar so that clicking a binding fires the same action a
+// keypress would.
 
 (function () {
   function comboKey(e) {
@@ -36,17 +40,27 @@
     fetch(url, { method: "POST", body });
   }
 
-  document.addEventListener("keydown", function (e) {
+  function actionFor(combo) {
     const main = document.querySelector("main");
     const raw = main && main.dataset.keymap;
-    if (!raw) return;
-    let map;
+    if (!raw) return null;
     try {
-      map = JSON.parse(raw);
+      const m = JSON.parse(raw);
+      return combo in m ? m[combo] : null;
     } catch (_) {
-      return;
+      return null;
     }
-    const action = map[comboKey(e)];
+  }
+
+  window.kx = {
+    fire: function (combo) {
+      const action = actionFor(combo);
+      if (action != null) dispatch(action);
+    },
+  };
+
+  document.addEventListener("keydown", function (e) {
+    const action = actionFor(comboKey(e));
     if (action == null) return;
     e.preventDefault();
     dispatch(action);

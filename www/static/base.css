@@ -54,6 +54,28 @@ button:hover > iconify-icon {
   color: var(--primary-5);
 }
 
+/* Status-bar bindings: hover highlights the whole label + keys cluster
+ * to advertise that clicking it fires the same action the key would. */
+.binding {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .15rem .4rem;
+  border-radius: var(--border-radius-1);
+  cursor: pointer;
+  user-select: none;
+}
+.binding:hover, .binding.is-hover {
+  background: var(--neutral-3);
+}
+.binding:hover kbd, .binding.is-hover kbd {
+  /* invert kbd so it stays distinguishable when the wrapper goes dark */
+  background: var(--neutral-2);
+}
+.binding-label { opacity: .75; }
+.binding:hover .binding-label, .binding.is-hover .binding-label { opacity: 1; }
+.binding-keys { display: inline-flex; gap: .15rem; }
+
 pre, code {
   font-family: var(--font-mono);
 }
