@@ -34,12 +34,21 @@ def keymap-for [mode: string, ctx: record]: nothing -> string {
       "cmd+enter": {url: $"/compose/submit/($ctx.composeStackId)" source: "#compose-text"}
     }
     _ => {
-      "j": "/select/clip/down"
-      "k": "/select/clip/up"
-      "shift+j": "/select/stack/down"
-      "shift+k": "/select/stack/up"
-      "n": "/compose/open"
-      "shift+n": "/stacks/new"
+      let base = {
+        "j": "/select/clip/down"
+        "k": "/select/clip/up"
+        "shift+j": "/select/stack/down"
+        "shift+k": "/select/stack/up"
+        "shift+n": "/stacks/new"
+      }
+      # `n` only binds when a stack is selected -- the URL carries the
+      # target id so the open handler doesn't have to re-derive it from
+      # ephemeral state (which a fresh `.cat` snapshot can't see).
+      if $ctx.selectedStackId != null {
+        $base | upsert n $"/compose/open/($ctx.selectedStackId)"
+      } else {
+        $base
+      }
     }
   }
   $map | to json -r
@@ -61,7 +70,7 @@ def view-model [state: record]: nothing -> record {
     mode: $state.mode
     composeStackId: $state.composeStackId
     composeStackName: (if $compose_stack == null { "" } else { $compose_stack.name })
-    keymap: (keymap-for $state.mode {composeStackId: $state.composeStackId})
+    keymap: (keymap-for $state.mode {composeStackId: $state.composeStackId selectedStackId: $state.selectedStackId})
   }
 }
 
@@ -116,14 +125,9 @@ def index-page []: nothing -> any {
     })
 
     # ---- compose (ephemeral modal mode) ----
-    (route {method: "POST" path: "/compose/open"} {|req ctx|
-      let state = .cat | projection project
-      if $state.selectedStackId == null {
-        "no stack selected" | metadata set { merge {'http.response': {status: 400}} }
-      } else {
-        .append compose.open --meta {stack_id: $state.selectedStackId} --ttl ephemeral | ignore
-        "" | metadata set { merge {'http.response': {status: 204}} }
-      }
+    (route {method: "POST" path-matches: "/compose/open/:id"} {|req ctx|
+      .append compose.open --meta {stack_id: $ctx.id} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
     })
     (route {method: "POST" path: "/compose/cancel"} {|req ctx|
       .append compose.close --meta {} --ttl ephemeral | ignore
