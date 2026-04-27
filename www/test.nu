@@ -151,6 +151,18 @@ let cycled = [
 assert ($cycled.selectedStackId == "a2") $"cycle should follow render order; got ($cycled.selectedStackId)"
 print "   ok"
 
+print "5g. clip.add with previous_id meta records the predecessor on the projected clip"
+let edited = [
+  {topic: "stack.add" id: "a1" hash: null   meta: {name: "X" sort: "auto"}}
+  {topic: "clip.add"  id: "c1" hash: "h1"   meta: {stack_id: "a1" mime_type: "text/plain"}}
+  {topic: "clip.add"  id: "c2" hash: "h2"   meta: {stack_id: "a1" mime_type: "text/plain" previous_id: "c1"}}
+  {topic: "clip.delete" id: "u1" hash: null meta: {id: "c1"}}
+] | projection project
+let live_clip = $edited.stacks | first | get clips | first
+assert ($live_clip.id == "c2")
+assert ($live_clip.previous_id == "c1") $"previous_id should be c1, got ($live_clip.previous_id)"
+print "   ok"
+
 print "5f. editor.open / editor.close toggle mode + editClipId"
 let editing = $FRAMES | append [
   {topic: "editor.open"  id: "u4" hash: null meta: {clip_id: "c1"}}
@@ -321,6 +333,7 @@ let projected = .cat | projection project
 let live_clip = $projected.stacks | where id == $edit_stack.id | first | get clips | first
 assert ($live_clip.position == "a") "new clip preserves the original position"
 assert ($live_clip.id != $original.id) "new clip has a new frame id"
+assert ($live_clip.previous_id == $original.id) "new clip points back to the predecessor"
 print "   ok"
 
 print "13. serve.nu: three-pane render emits data-keymap with the active mode's keys"

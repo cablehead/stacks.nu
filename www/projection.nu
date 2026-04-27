@@ -4,7 +4,8 @@
 #   stack.add    meta: {name, sort}                          frame.id = stack id
 #   stack.update meta: {id, name?, sort?}
 #   stack.delete meta: {id}
-#   clip.add     meta: {stack_id, mime_type, position?}      frame.id = clip id
+#   clip.add     meta: {stack_id, mime_type, position?, previous_id?}
+#                                                                frame.id = clip id
 #   clip.move    meta: {id, stack_id?, position?}
 #   clip.delete  meta: {id}
 #
@@ -123,6 +124,7 @@ def clip-add [state: record, frame: record] {
     hash: ($frame.hash?)
     mime_type: ($frame.meta?.mime_type? | default "text/plain")
     position: ($frame.meta?.position?)
+    previous_id: ($frame.meta?.previous_id?)
   }
   let stacks = $state.stacks | each {|s|
     if $s.id == $stack_id {

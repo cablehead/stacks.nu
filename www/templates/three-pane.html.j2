@@ -131,6 +131,9 @@
       ">
         {{ selectedClip.id }} | {{ selectedClip.mime_type }}
         {% if selectedClip.position %} | pos {{ selectedClip.position }}{% endif %}
+        {% if selectedClip.previous_id %}
+          | <a href="/clips/{{ selectedClip.previous_id }}/content" target="_blank" style="color: inherit;">previous</a>
+        {% endif %}
       </footer>
     {% else %}
       <p style="color: var(--neutral-2-dim);">Nothing selected.</p>

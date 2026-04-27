@@ -184,7 +184,7 @@ def index-page []: nothing -> any {
         let old = .get $ctx.id
         if $old != null {
           let mime = $old.meta?.mime_type? | default "text/plain"
-          let base = {stack_id: $old.meta.stack_id mime_type: $mime}
+          let base = {stack_id: $old.meta.stack_id mime_type: $mime previous_id: $ctx.id}
           let meta = if ($old.meta?.position? != null) {
             $base | merge {position: $old.meta.position}
           } else { $base }
