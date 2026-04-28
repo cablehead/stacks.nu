@@ -222,13 +222,13 @@ def index-page []: nothing -> any {
       # Pre-paint theme apply -- runs synchronously before the stylesheet so
       # there's no light->dark flash. localStorage wins; otherwise system pref.
       (
-        SCRIPT "
+        SCRIPT {__html: "
 (function() {
   var saved = localStorage.getItem('theme');
   var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme:dark)').matches;
   if (dark) document.documentElement.classList.add('dark');
 })();
-"
+"}
       )
       (META {charset: "utf-8"})
       (META {name: "viewport" content: "width=device-width,initial-scale=1"})
@@ -236,19 +236,29 @@ def index-page []: nothing -> any {
       (LINK {rel: "stylesheet" href: "http://localhost:7331/assets/css/stellar"})
       (LINK {rel: "stylesheet" href: "/base.css"})
       (SCRIPT {type: "module" src: "/datastar@1.0.0-RC.8.js"})
+      # Stellar dev-loop: subscribes to the local Stellar server's live-refresh
+      # SSE so token edits restyle the page without a reload. Harmless if the
+      # endpoint is offline (the @get just fails silently).
+      (
+        LINK {
+          id: "stellar-css"
+          rel: "stylesheet"
+          data-init: "@get('http://localhost:7331/live-refresh')"
+        }
+      )
       (SCRIPT-ICONIFY)
       (SCRIPT {src: "/keys.js"})
       # Theme toggle handler. Lives at window.toggleTheme so the status-bar
       # button can call it inline; persists choice and updates the icon.
       (
-        SCRIPT "
+        SCRIPT {__html: "
 window.toggleTheme = function() {
   var isDark = document.documentElement.classList.toggle('dark');
   localStorage.setItem('theme', isDark ? 'dark' : 'light');
   var icon = document.querySelector('#theme-toggle iconify-icon');
   if (icon) icon.setAttribute('icon', isDark ? 'lucide:sun' : 'lucide:moon');
 };
-"
+"}
       )
     )
     (
