@@ -185,25 +185,25 @@ def shots-page []: nothing -> any {
       (LINK {rel: "stylesheet" href: "/base.css"})
     )
     (
-      BODY {style: "padding: 1.5rem; background: var(--neutral-1); color: var(--neutral-1-on); font-family: var(--font-sans);"}
+      BODY {style: "padding: 1.5rem; background: var(--primary-6); color: var(--primary-6-on); font-family: var(--font-sans);"}
       (H1 {style: "font-size: var(--font-size-2); margin: 0 0 1rem;"} "stacks.nu screenshots")
-      (P {style: "color: var(--neutral-2-dim); font-size: var(--font-size--1); margin: 0 0 1.5rem;"}
+      (P {style: "color: var(--primary-7-dim); font-size: var(--font-size--1); margin: 0 0 1.5rem;"}
         $"($files | length) pose"
         (if ($files | length) == 1 { "" } else { "s" })
         " in "
         (CODE "www/static/shots/")
       )
       (if ($files | is-empty) {
-        (P {style: "color: var(--neutral-2-dim);"} "No shots yet. Run "
+        (P {style: "color: var(--primary-7-dim);"} "No shots yet. Run "
           (CODE "scripts/shoot.py") " to bake some.")
       } else {
         (
           DIV {style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1rem;"}
           ($files | each {|f|
             let slug = $f | str replace ".png" "" | str replace -a "-" " "
-            (FIGURE {style: "margin: 0; background: var(--neutral-2); border: 1px solid var(--neutral-3); border-radius: var(--border-radius-2); overflow: hidden;"}
+            (FIGURE {style: "margin: 0; background: var(--primary-7); border: 1px solid var(--primary-7-dim); border-radius: var(--border-radius-2); overflow: hidden;"}
               (IMG {src: $"/shots/($f)" alt: $slug style: "width: 100%; display: block;"})
-              (FIGCAPTION {style: "padding: .5rem .75rem; font-family: var(--font-mono); font-size: var(--font-size--1); color: var(--neutral-2-on); border-top: 1px solid var(--neutral-3);"} $slug)
+              (FIGCAPTION {style: "padding: .5rem .75rem; font-family: var(--font-mono); font-size: var(--font-size--1); color: var(--primary-7-on); border-top: 1px solid var(--primary-7-dim);"} $slug)
             )
           })
         )
@@ -219,6 +219,17 @@ def index-page []: nothing -> any {
     HTML
     (
       HEAD
+      # Pre-paint theme apply -- runs synchronously before the stylesheet so
+      # there's no light->dark flash. localStorage wins; otherwise system pref.
+      (
+        SCRIPT "
+(function() {
+  var saved = localStorage.getItem('theme');
+  var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme:dark)').matches;
+  if (dark) document.documentElement.classList.add('dark');
+})();
+"
+      )
       (META {charset: "utf-8"})
       (META {name: "viewport" content: "width=device-width,initial-scale=1"})
       (TITLE "stacks.nu")
@@ -227,6 +238,18 @@ def index-page []: nothing -> any {
       (SCRIPT {type: "module" src: "/datastar@1.0.0-RC.8.js"})
       (SCRIPT-ICONIFY)
       (SCRIPT {src: "/keys.js"})
+      # Theme toggle handler. Lives at window.toggleTheme so the status-bar
+      # button can call it inline; persists choice and updates the icon.
+      (
+        SCRIPT "
+window.toggleTheme = function() {
+  var isDark = document.documentElement.classList.toggle('dark');
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  var icon = document.querySelector('#theme-toggle iconify-icon');
+  if (icon) icon.setAttribute('icon', isDark ? 'lucide:sun' : 'lucide:moon');
+};
+"
+      )
     )
     (
       BODY {data-init: "@get('/updates')"}

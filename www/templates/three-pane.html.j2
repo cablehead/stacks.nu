@@ -4,8 +4,8 @@
     display: flex;
     flex-direction: column;
     height: 100dvh;
-    background: var(--neutral-1);
-    color: var(--neutral-1-on);
+    background: var(--primary-6);
+    color: var(--primary-6-on);
     font-family: var(--font-sans);
     font-size: var(--font-size-0);
   "
@@ -19,10 +19,10 @@
   ">
   <aside aria-label="Stacks" style="
     overflow-y: auto;
-    border-right: 1px solid var(--neutral-3);
-    background: var(--neutral-2);
+    border-right: 1px solid var(--primary-7-dim);
+    background: var(--primary-7);
   ">
-    <header style="padding: .5rem .75rem; font-size: var(--font-size--1); color: var(--neutral-2-dim); text-transform: uppercase; letter-spacing: var(--font-letter-spacing-1);">
+    <header style="padding: .5rem .75rem; font-size: var(--font-size--1); color: var(--primary-7-dim); text-transform: uppercase; letter-spacing: var(--font-letter-spacing-1);">
       Stacks
     </header>
     <nav>
@@ -51,7 +51,7 @@
             {% if stack.id == selectedStackId %}data-init="el.scrollIntoView({block: 'nearest'})"{% endif %}
           >
             {{ stack.name }}
-            <small style="display: block; color: var(--neutral-2-dim); font-size: var(--font-size--2);">
+            <small style="display: block; color: var(--primary-7-dim); font-size: var(--font-size--2);">
               {{ stack.clips | length }} | {{ stack.sort }}
             </small>
           </button>
@@ -63,10 +63,10 @@
 
   <section aria-label="Clips" style="
     overflow-y: auto;
-    border-right: 1px solid var(--neutral-3);
-    background: var(--neutral-1);
+    border-right: 1px solid var(--primary-7-dim);
+    background: var(--primary-6);
   ">
-    <header style="padding: .5rem .75rem; font-size: var(--font-size--1); color: var(--neutral-2-dim); text-transform: uppercase; letter-spacing: var(--font-letter-spacing-1);">
+    <header style="padding: .5rem .75rem; font-size: var(--font-size--1); color: var(--primary-7-dim); text-transform: uppercase; letter-spacing: var(--font-letter-spacing-1);">
       Clips
     </header>
     <ul style="list-style: none; margin: 0; padding: 0;">
@@ -81,7 +81,7 @@
             text-align: left;
             padding: .4rem .75rem;
             border: 0;
-            border-bottom: 1px solid var(--neutral-2);
+            border-bottom: 1px solid var(--primary-7);
             cursor: pointer;
             font-family: var(--font-mono);
             font-size: var(--font-size--1);
@@ -103,7 +103,7 @@
       </li>
       {% endfor %}
       {% if not clips %}
-      <li style="padding: .75rem; color: var(--neutral-2-dim); font-size: var(--font-size--1);">
+      <li style="padding: .75rem; color: var(--primary-7-dim); font-size: var(--font-size--1);">
         No clips yet.
       </li>
       {% endif %}
@@ -113,7 +113,7 @@
   <article aria-label="Preview" style="
     overflow: auto;
     padding: 1rem 1.25rem;
-    background: var(--neutral-1);
+    background: var(--primary-6);
   ">
     {% if selectedClip %}
       {% if selectedClip.mime_type == "image/png" or selectedClip.mime_type == "image/jpeg" %}
@@ -131,9 +131,9 @@
       <footer style="
         margin-top: 1rem;
         padding-top: .5rem;
-        border-top: 1px solid var(--neutral-3);
+        border-top: 1px solid var(--primary-7-dim);
         font-size: var(--font-size--2);
-        color: var(--neutral-2-dim);
+        color: var(--primary-7-dim);
         font-family: var(--font-mono);
       ">
         {{ selectedClip.id }} | {{ selectedClip.mime_type }}
@@ -143,7 +143,7 @@
         {% endif %}
       </footer>
     {% else %}
-      <p style="color: var(--neutral-2-dim);">Nothing selected.</p>
+      <p style="color: var(--primary-7-dim);">Nothing selected.</p>
     {% endif %}
   </article>
 
@@ -160,9 +160,9 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      background: var(--neutral-1);
-      color: var(--neutral-1-on);
-      border: 1px solid var(--neutral-3);
+      background: var(--primary-6);
+      color: var(--primary-6-on);
+      border: 1px solid var(--primary-7-dim);
       border-radius: var(--border-radius-3);
       padding: 1rem 1.25rem;
       box-shadow: 0 1.5rem 3rem rgba(0,0,0,0.4);
@@ -197,10 +197,10 @@
     align-items: center;
     gap: 1rem;
     padding: .25rem .75rem;
-    background: var(--neutral-2);
-    border-top: 1px solid var(--neutral-3);
+    background: var(--primary-7);
+    border-top: 1px solid var(--primary-7-dim);
     font-size: var(--font-size--2);
-    color: var(--neutral-2-on);
+    color: var(--primary-7-on);
   ">
     <span style="display: flex; gap: .5rem; align-items: center;">
       {% for a in stackActions %}
@@ -233,6 +233,33 @@
           onmousedown="window.kx.fire('{{ b.combo | safe }}')"
         ><span class="binding-label">{{ b.label }}</span><span class="binding-keys">{% for k in b.keys %}<kbd>{{ k }}</kbd>{% endfor %}</span></span>
       {% endfor %}
+      <span aria-hidden="true" style="
+        width: 1px;
+        height: 1.2em;
+        margin: 0 .25rem;
+        background: var(--primary-7-dim);
+      "></span>
+      <button
+        id="theme-toggle"
+        type="button"
+        title="Toggle theme"
+        aria-label="Toggle theme"
+        onmousedown="window.toggleTheme()"
+        data-init="el.querySelector('iconify-icon').setAttribute('icon', document.documentElement.classList.contains('dark') ? 'lucide:sun' : 'lucide:moon')"
+        style="
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 1.4rem;
+          height: 1.4rem;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          border-radius: var(--border-radius-1);
+          cursor: pointer;
+          color: inherit;
+        "
+      ><iconify-icon icon="lucide:moon" width="1em" height="1em"></iconify-icon></button>
     </span>
   </footer>
 

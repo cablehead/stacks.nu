@@ -11,8 +11,8 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--neutral-1);
-  color: var(--neutral-1-on);
+  background: var(--primary-6);
+  color: var(--primary-6-on);
   font-family: var(--font-sans);
   font-size: var(--font-size-0);
   line-height: var(--font-line-height-0);
@@ -30,7 +30,7 @@ button {
   font: inherit;
   color: inherit;
 }
-button:hover { background: var(--neutral-2-dim); }
+button:hover { background: var(--primary-7-dim); }
 button:focus-visible {
   outline: 2px solid var(--primary-4);
   outline-offset: -2px;
@@ -46,8 +46,8 @@ kbd {
   font-family: var(--font-mono);
   font-size: 0.9em;
   line-height: 1;
-  background: var(--neutral-3);
-  color: var(--neutral-1-on);
+  background: var(--primary-7-dim);
+  color: var(--primary-6-on);
   border-radius: 3px;
   border: 0;
 }
@@ -68,11 +68,11 @@ button:hover > iconify-icon {
   user-select: none;
 }
 .binding:hover, .binding.is-hover {
-  background: var(--neutral-3);
+  background: var(--primary-7-dim);
 }
 .binding:hover kbd, .binding.is-hover kbd {
   /* invert kbd so it stays distinguishable when the wrapper goes dark */
-  background: var(--neutral-2);
+  background: var(--primary-7);
 }
 .binding-label { opacity: .75; }
 .binding:hover .binding-label, .binding.is-hover .binding-label { opacity: 1; }
