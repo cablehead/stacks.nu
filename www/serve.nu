@@ -269,6 +269,84 @@ def render-event [state: record]: nothing -> record {
   {event: "datastar-patch-elements" data: $"selector main\n($elements)"}
 }
 
+# Synthetic state for the /design page. Same shape projection produces, but
+# hand-rolled so we can vary the mode without driving a live store.
+def design-state [variant: string]: nothing -> record {
+  let stacks = [
+    {id: "s1" name: "Inbox"    sort: "auto"   lastTouched: "f3"
+      clips: [
+        {id: "c1" hash: "fake-h1" mime_type: "text/plain" position: null lastTouched: "c1" versions: ["c1"]}
+        {id: "c2" hash: "fake-h2" mime_type: "text/plain" position: null lastTouched: "c2" versions: ["c2"]}
+      ]}
+    {id: "s2" name: "Snippets" sort: "manual" lastTouched: "c4"
+      clips: [
+        {id: "c3" hash: "fake-h3" mime_type: "text/plain" position: "a" lastTouched: "c3" versions: ["c3"]}
+        {id: "c4" hash: "fake-h4" mime_type: "text/plain" position: "b" lastTouched: "c4" versions: ["c4"]}
+      ]}
+    {id: "s3" name: "Untitled" sort: "auto"   lastTouched: "s3" clips: []}
+  ]
+  let base = projection empty
+    | update stacks $stacks
+    | update selectedStackId "s1"
+    | update selectedClipId "c1"
+    | update selectionExplicit true
+  match $variant {
+    "main"             => $base
+    "main-empty-stack" => ($base | update selectedStackId "s3" | update selectedClipId null)
+    "compose"          => ($base | update mode "compose" | update composeStackId "s1")
+    "edit"             => ($base | update mode "edit"    | update editClipId "c1")
+    "rename"           => ($base | update mode "rename"  | update renameStackId "s1")
+    _ => $base
+  }
+}
+
+# Render one mode into a self-contained HTML doc suitable for iframe srcdoc.
+# No scripts loaded -- the page is inert; click handlers reference an undefined
+# window.actions and silently no-op.
+def design-tile-html [variant: string]: nothing -> string {
+  let state = design-state $variant
+  let main_html = view-model $state | .mj ($script_dir | path join "templates/three-pane.html.j2")
+  [
+    "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+    "<link rel='stylesheet' href='http://localhost:7331/assets/css/stellar'>"
+    "<link rel='stylesheet' href='/base.css'>"
+    "<script src='https://cdn.jsdelivr.net/npm/iconify-icon@2/dist/iconify-icon.min.js'></script>"
+    "</head><body>"
+    $main_html
+    "</body></html>"
+  ] | str join
+}
+
+def design-page []: nothing -> any {
+  let variants = ["main" "main-empty-stack" "compose" "edit" "rename"]
+  (
+    HTML
+    (
+      HEAD
+      (META {charset: "utf-8"})
+      (TITLE "stacks.nu | design")
+      (LINK {rel: "stylesheet" href: "http://localhost:7331/assets/css/stellar"})
+      (LINK {rel: "stylesheet" href: "/base.css"})
+      (SCRIPT-ICONIFY)
+    )
+    (
+      BODY {style: "padding: 1.5rem; background: var(--primary-6); color: var(--primary-6-on); font-family: var(--font-sans); margin: 0;"}
+      (H1 {style: "font-size: var(--font-size-2); margin: 0 0 .25rem;"} "stacks.nu | design")
+      (P {style: "color: var(--primary-7-dim); font-size: var(--font-size--1); margin: 0 0 1.5rem;"}
+        "Inert layout previews of every mode. Each tile is an iframe rendering the live template at a fixed state.")
+      (
+        DIV {style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(40rem, 1fr)); gap: 1.5rem;"}
+        ($variants | each {|v|
+          (FIGURE {style: "margin: 0; background: var(--primary-7); border: 1px solid var(--primary-7-dim); border-radius: var(--border-radius-2); overflow: hidden;"}
+            (IFRAME {srcdoc: (design-tile-html $v) title: $v style: "width: 100%; height: 26rem; border: 0; display: block;"})
+            (FIGCAPTION {style: "padding: .5rem .75rem; font-family: var(--font-mono); font-size: var(--font-size--1); color: var(--primary-7-on); border-top: 1px solid var(--primary-7-dim);"} $v)
+          )
+        })
+      )
+    )
+  )
+}
+
 def shots-page []: nothing -> any {
   let dir = $script_dir | path join "static/shots"
   let files = if ($dir | path exists) {
@@ -369,6 +447,7 @@ window.toggleTheme = function() {
   dispatch $req [
     (route {method: "GET" path: "/"} {|req ctx| index-page })
     (route {method: "GET" path: "/shots"} {|req ctx| shots-page })
+    (route {method: "GET" path: "/design"} {|req ctx| design-page })
 
     (route {method: "GET" path: "/updates"} {|req ctx|
       .cat -f
