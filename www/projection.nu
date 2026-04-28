@@ -201,15 +201,32 @@ def clip-move [state: record, frame: record] {
 
 def clip-delete [state: record, frame: record] {
   let clip_id = $frame.meta.id
-  let owner_id = $state.stacks
+  let owner = $state.stacks
     | where ($it.clips | any {|c| $c.id == $clip_id })
     | get -i 0
-    | get -i id
+  let owner_id = $owner | get -i id
   let stacks = $state.stacks | each {|s|
     let cleaned = $s | update clips ($s.clips | where id != $clip_id)
     if $s.id == $owner_id { $cleaned | update lastTouched $frame.id } else { $cleaned }
   }
-  $state | update stacks $stacks
+  # Preserve cursor position within the stack: if the deleted clip was the
+  # selected one, take whatever now occupies that slot (or fall back to the
+  # last remaining clip when the deleted one was the bottom).
+  let new_selected = if $owner == null or $state.selectedClipId != $clip_id {
+    $state.selectedClipId
+  } else {
+    let pre = sorted-clips $owner | get id
+    let idx = $pre | enumerate | where item == $clip_id | get index.0?
+    let post = $pre | where {|x| $x != $clip_id }
+    if $idx == null or ($post | is-empty) {
+      null
+    } else if $idx >= ($post | length) {
+      $post | last
+    } else {
+      $post | get $idx
+    }
+  }
+  $state | update stacks $stacks | update selectedClipId $new_selected
 }
 
 # Cycle by `action`, jump by `id`.

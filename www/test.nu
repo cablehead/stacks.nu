@@ -177,6 +177,48 @@ let order = projection sorted-clips ($two.stacks | first) | get id
 assert ($order == ["c1" "c2"]) $"edited c1 should bubble above c2 in auto-sort; got ($order)"
 print "   ok"
 
+print "5h. clip.delete preserves cursor position within the stack"
+# Manual sort, deterministic order: c1, c2, c3 (positions a, b, c).
+# Cursor on c2 -> deleting c2 should land cursor on c3 (slot stays).
+# Cursor on c3 -> deleting c3 should land cursor on c2 (last falls back).
+# Cursor on c1 (and c1 deleted) -> cursor goes to c2 (slot 0 still slot 0).
+const DEL_FRAMES = [
+  {topic: "stack.add" id: "ds" hash: null meta: {name: "D" sort: "manual"}}
+  {topic: "clip.add"  id: "c1" hash: "h1" meta: {stack_id: "ds" mime_type: "text/plain" position: "a"}}
+  {topic: "clip.add"  id: "c2" hash: "h2" meta: {stack_id: "ds" mime_type: "text/plain" position: "b"}}
+  {topic: "clip.add"  id: "c3" hash: "h3" meta: {stack_id: "ds" mime_type: "text/plain" position: "c"}}
+]
+
+let middle_gone = $DEL_FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "ds"}}
+  {topic: "clip.select"  id: "x" hash: null meta: {id: "c2"}}
+  {topic: "clip.delete"  id: "x" hash: null meta: {id: "c2"}}
+] | projection project
+assert ($middle_gone.selectedClipId == "c3") $"slot kept; expected c3 got ($middle_gone.selectedClipId)"
+
+let last_gone = $DEL_FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "ds"}}
+  {topic: "clip.select"  id: "x" hash: null meta: {id: "c3"}}
+  {topic: "clip.delete"  id: "x" hash: null meta: {id: "c3"}}
+] | projection project
+assert ($last_gone.selectedClipId == "c2") $"bottom falls back; expected c2 got ($last_gone.selectedClipId)"
+
+let top_gone = $DEL_FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "ds"}}
+  {topic: "clip.select"  id: "x" hash: null meta: {id: "c1"}}
+  {topic: "clip.delete"  id: "x" hash: null meta: {id: "c1"}}
+] | projection project
+assert ($top_gone.selectedClipId == "c2") $"top slot promotes c2; got ($top_gone.selectedClipId)"
+
+# Deleting an unselected clip leaves the cursor alone.
+let other_gone = $DEL_FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "ds"}}
+  {topic: "clip.select"  id: "x" hash: null meta: {id: "c2"}}
+  {topic: "clip.delete"  id: "x" hash: null meta: {id: "c3"}}
+] | projection project
+assert ($other_gone.selectedClipId == "c2") $"unrelated delete should not move the cursor"
+print "   ok"
+
 print "5f. editor.open / editor.close toggle mode + editClipId"
 let editing = $FRAMES | append [
   {topic: "editor.open"  id: "u4" hash: null meta: {clip_id: "c1"}}
