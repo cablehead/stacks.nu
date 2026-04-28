@@ -30,6 +30,36 @@ button {
   font: inherit;
   color: inherit;
 }
+
+/* Form controls don't inherit font by default. Reset so they pick up
+ * body's font-family / size / color, and have a clean canvas (no native
+ * borders or background). Per-element styles only override what differs. */
+input, textarea, select {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+/* Shared dialog-box treatment for compose / edit / rename / actions modals.
+ * Layout (size, position) stays per-modal inline; visual skin lives here. */
+.modal-box {
+  background: var(--primary-6);
+  color: var(--primary-6-on);
+  border: 1px solid var(--primary-7-dim);
+  border-radius: var(--border-radius-3);
+  box-shadow: 0 1.5rem 3rem rgba(0,0,0,0.4);
+}
+
+/* Small uppercase pane label ("Stacks", "Clips"). */
+.pane-header {
+  padding: .5rem .75rem;
+  font-size: var(--font-size--1);
+  color: var(--primary-7-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--font-letter-spacing-1);
+}
 button:hover { background: var(--primary-7-dim); }
 button:focus-visible {
   outline: 2px solid var(--primary-4);
