@@ -128,6 +128,7 @@ def keymap-for [mode: string, ctx: record]: nothing -> record {
 def keymap-main [ctx: record]: nothing -> record {
   let base = {
     "j": "clip.next", "k": "clip.prev"
+    "ctrl+n": "clip.next", "ctrl+p": "clip.prev"
     "shift+j": "stack.next", "shift+k": "stack.prev"
     "shift+n": "stack.new"
     "cmd+k": "actions.open"
