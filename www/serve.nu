@@ -35,6 +35,7 @@ const KEY_GLYPH = {
   "Shift": "\u{21E7}"    # ⇧
   "Enter": "\u{21B5}"    # ↵
   "Esc": "ESC"           # the text "ESC", matching ~/stacks's convention
+  "Del": "DEL"           # covers both Delete and Backspace
 }
 
 def glyphs [keys: list<string>]: nothing -> list<string> {
@@ -49,6 +50,12 @@ def js-post [url: string]: nothing -> string {
 }
 def js-post-body [url: string, body_expr: string]: nothing -> string {
   "fetch(" + ($url | to json -r) + ", {method:'POST', body: " + $body_expr + "})"
+}
+def js-delete [url: string]: nothing -> string {
+  "fetch(" + ($url | to json -r) + ", {method:'DELETE'})"
+}
+def js-confirm-delete [url: string, prompt: string]: nothing -> string {
+  "if (confirm(" + ($prompt | to json -r) + ")) fetch(" + ($url | to json -r) + ", {method:'DELETE'})"
 }
 
 # Action registry. Action id -> JS string. Triggers (keymap, status-bar
@@ -80,11 +87,16 @@ def actions-for [mode: string, ctx: record]: nothing -> record {
         $core | upsert "clip.new" (js-post $"/compose/open/($ctx.selectedStackId)")
       } else { $core }
       let with_e = if $ctx.selectedClipId != null {
-        $with_n | upsert "clip.edit" (js-post $"/editor/open/($ctx.selectedClipId)")
+        $with_n
+        | upsert "clip.edit"   (js-post $"/editor/open/($ctx.selectedClipId)")
+        | upsert "clip.delete" (js-delete $"/clips/($ctx.selectedClipId)")
       } else { $with_n }
       if $ctx.selectedStack != null {
         let next_sort = if $ctx.selectedStack.sort == "auto" { "manual" } else { "auto" }
-        $with_e | upsert "stack.sort.toggle" (js-post $"/stacks/($ctx.selectedStack.id)/sort/($next_sort)")
+        let stack_label = $ctx.selectedStack.name? | default "this stack"
+        $with_e
+        | upsert "stack.sort.toggle" (js-post $"/stacks/($ctx.selectedStack.id)/sort/($next_sort)")
+        | upsert "stack.delete" (js-confirm-delete $"/stacks/($ctx.selectedStack.id)" $"Delete stack \"($stack_label)\"?")
       } else { $with_e }
     }
   }
@@ -102,8 +114,18 @@ def keymap-for [mode: string, ctx: record]: nothing -> record {
         "shift+j": "stack.next", "shift+k": "stack.prev"
         "shift+n": "stack.new"
       }
-      let with_n = if $ctx.selectedStackId != null { $base | upsert "n" "clip.new" } else { $base }
-      if $ctx.selectedClipId != null { $with_n | upsert "e" "clip.edit" } else { $with_n }
+      let with_stack = if $ctx.selectedStackId != null {
+        $base
+        | upsert "n" "clip.new"
+        | upsert "shift+delete"    "stack.delete"
+        | upsert "shift+backspace" "stack.delete"
+      } else { $base }
+      if $ctx.selectedClipId != null {
+        $with_stack
+        | upsert "e" "clip.edit"
+        | upsert "delete"    "clip.delete"
+        | upsert "backspace" "clip.delete"
+      } else { $with_stack }
     }
   }
 }
@@ -127,12 +149,16 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
         {action: "stack.prev" label: "prev stack" keys: (glyphs [Shift K])}
         {action: "stack.new"  label: "new stack"  keys: (glyphs [Shift N])}
       ]
-      let with_n = if $ctx.selectedStackId != null {
-        $core | append {action: "clip.new" label: "new clip" keys: (glyphs [N])}
+      let with_stack = if $ctx.selectedStackId != null {
+        $core
+        | append {action: "clip.new"     label: "new clip"     keys: (glyphs [N])}
+        | append {action: "stack.delete" label: "delete stack" keys: (glyphs [Shift Del])}
       } else { $core }
       if $ctx.selectedClipId != null {
-        $with_n | append {action: "clip.edit" label: "edit clip" keys: (glyphs [E])}
-      } else { $with_n }
+        $with_stack
+        | append {action: "clip.edit"   label: "edit clip"   keys: (glyphs [E])}
+        | append {action: "clip.delete" label: "delete clip" keys: (glyphs [Del])}
+      } else { $with_stack }
     }
   }
 }
