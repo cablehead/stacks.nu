@@ -16,15 +16,18 @@
 #   compose.close meta: {}                          # exit compose mode
 #   editor.open   meta: {clip_id}                   # enter edit mode
 #   editor.close  meta: {}                          # exit edit mode
+#   rename.open   meta: {stack_id}                  # enter rename mode
+#   rename.close  meta: {}                          # exit rename mode
 #
 # State shape:
 #   {
 #     stacks: [{id, name, sort, lastTouched, clips: [{id, hash, mime_type, position, lastTouched, versions}]}]
 #     selectedStackId: string|null
 #     selectedClipId:  string|null
-#     mode:            "main" | "compose" | "edit"
+#     mode:            "main" | "compose" | "edit" | "rename"
 #     composeStackId:  string|null
 #     editClipId:      string|null
+#     renameStackId:   string|null
 #     frameId:         string|null   # id of the last frame that produced this state
 #   }
 #
@@ -33,7 +36,7 @@
 # float to the top), manual = position asc.
 
 export def empty []: nothing -> record {
-  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null selectionExplicit: false frameId: null}
+  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null selectionExplicit: false frameId: null}
 }
 
 export def sorted-clips [stack: record]: nothing -> list {
@@ -59,6 +62,8 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
     "compose.close" => ($state | update mode "main" | update composeStackId null)
     "editor.open" => ($state | update mode "edit" | update editClipId ($frame.meta?.clip_id?))
     "editor.close" => ($state | update mode "main" | update editClipId null)
+    "rename.open" => ($state | update mode "rename" | update renameStackId ($frame.meta?.stack_id?))
+    "rename.close" => ($state | update mode "main" | update renameStackId null)
     _ => $state
   }
   $s | update frameId ($frame.id? | default $s.frameId)

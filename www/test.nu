@@ -272,6 +272,21 @@ assert ($edit_done.mode == "main")
 assert ($edit_done.editClipId == null)
 print "   ok"
 
+print "5j. rename.open / rename.close toggle mode + renameStackId"
+let renaming = $FRAMES | append [
+  {topic: "rename.open"  id: "u6" hash: null meta: {stack_id: "s2"}}
+] | projection project
+assert ($renaming.mode == "rename")
+assert ($renaming.renameStackId == "s2")
+
+let rename_done = $FRAMES | append [
+  {topic: "rename.open"  id: "u6" hash: null meta: {stack_id: "s2"}}
+  {topic: "rename.close" id: "u7" hash: null meta: {}}
+] | projection project
+assert ($rename_done.mode == "main")
+assert ($rename_done.renameStackId == null)
+print "   ok"
+
 print "5b. compose.open / compose.close toggle mode + composeStackId"
 let opened = $FRAMES | append [
   {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
@@ -435,6 +450,24 @@ let live_clip = $projected.stacks | where id == $edit_stack.id | first | get cli
 assert ($live_clip.id == $original.id) "clip id stays stable across edit"
 assert ($live_clip.position == "a") "manual position survives"
 assert ($live_clip.hash == ($updates | first | get hash)) "projection tracks the latest hash"
+print "   ok"
+
+print "12c. serve.nu: /stacks/:id/rename/submit emits stack.update with new name"
+'{"name":"Pre","sort":"auto"}' | do $handler {
+  method: "POST" path: "/stacks" headers: {} query: {}
+}
+let to_rename = .cat | where topic == "stack.add" | last
+"Renamed via route" | do $handler {
+  method: "POST"
+  path: $"/stacks/($to_rename.id)/rename/submit"
+  headers: {} query: {}
+}
+let rename_frame = .cat | where topic == "stack.update" and meta.id == $to_rename.id | last
+assert ($rename_frame != null) "/rename/submit should emit a stack.update"
+assert ($rename_frame.meta.name == "Renamed via route") $"got ($rename_frame.meta.name?)"
+let proj = .cat | projection project
+let renamed = $proj.stacks | where id == $to_rename.id | first
+assert ($renamed.name == "Renamed via route")
 print "   ok"
 
 print "13. serve.nu: actions registry, keymap, and status bar all reference action ids"

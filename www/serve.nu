@@ -72,6 +72,10 @@ def actions-for [mode: string, ctx: record]: nothing -> record {
       "edit.save":   (js-post-body $"/editor/submit/($ctx.editClipId)" "document.querySelector('#compose-text').value")
       "edit.cancel": (js-post "/editor/cancel")
     }
+    "rename" => {
+      "rename.save":   (js-post-body $"/stacks/($ctx.renameStackId)/rename/submit" "document.querySelector('#rename-text').value")
+      "rename.cancel": (js-post "/rename/cancel")
+    }
     _ => {
       let core = {
         "clip.next":  (js-post "/select/clip/down")
@@ -96,6 +100,7 @@ def actions-for [mode: string, ctx: record]: nothing -> record {
         let stack_label = $ctx.selectedStack.name? | default "this stack"
         $with_e
         | upsert "stack.sort.toggle" (js-post $"/stacks/($ctx.selectedStack.id)/sort/($next_sort)")
+        | upsert "stack.rename" (js-post $"/stacks/($ctx.selectedStack.id)/rename/open")
         | upsert "stack.delete" (js-confirm-delete $"/stacks/($ctx.selectedStack.id)" $"Delete stack \"($stack_label)\"?")
       } else { $with_e }
     }
@@ -108,6 +113,7 @@ def keymap-for [mode: string, ctx: record]: nothing -> record {
   match $mode {
     "compose" => {"cmd+enter": "compose.save", "escape": "compose.cancel"}
     "edit" => {"cmd+enter": "edit.save", "escape": "edit.cancel"}
+    "rename" => {"enter": "rename.save", "cmd+enter": "rename.save", "escape": "rename.cancel"}
     _ => {
       let base = {
         "j": "clip.next", "k": "clip.prev"
@@ -117,6 +123,7 @@ def keymap-for [mode: string, ctx: record]: nothing -> record {
       let with_stack = if $ctx.selectedStackId != null {
         $base
         | upsert "n" "clip.new"
+        | upsert "r" "stack.rename"
         | upsert "shift+delete"    "stack.delete"
         | upsert "shift+backspace" "stack.delete"
       } else { $base }
@@ -141,6 +148,10 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
       {action: "edit.save"   label: "save"   keys: (glyphs [Cmd Enter])}
       {action: "edit.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
+    "rename" => [
+      {action: "rename.save"   label: "save"   keys: (glyphs [Enter])}
+      {action: "rename.cancel" label: "cancel" keys: (glyphs [Esc])}
+    ]
     _ => {
       let core = [
         {action: "clip.next"  label: "next clip"  keys: (glyphs [J])}
@@ -152,6 +163,7 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
       let with_stack = if $ctx.selectedStackId != null {
         $core
         | append {action: "clip.new"     label: "new clip"     keys: (glyphs [N])}
+        | append {action: "stack.rename" label: "rename stack" keys: (glyphs [R])}
         | append {action: "stack.delete" label: "delete stack" keys: (glyphs [Shift Del])}
       } else { $core }
       if $ctx.selectedClipId != null {
@@ -183,8 +195,9 @@ def mode-name-for [mode: string, ctx: record]: nothing -> string {
   match $mode {
     "compose" => $"New clip in ($ctx.composeStackName)"
     "edit" => $"Edit clip in ($ctx.editStackName)"
+    "rename" => "Rename stack"
     _ => {
-      if $ctx.selectedStack == null { "Stacks" } else { $ctx.selectedStack.name }
+      if $ctx.selectedStack == null { "Stacks" } else { ($ctx.selectedStack.name? | default "Untitled") }
     }
   }
 }
@@ -210,11 +223,14 @@ def view-model [state: record]: nothing -> record {
   let edit_clip = if $edit_target == null { null } else { hydrate-clip $edit_target.clip }
   let compose_name = if $compose_stack == null { "" } else { $compose_stack.name }
   let edit_name = if $edit_target == null { "" } else { $edit_target.stackName }
+  let rename_stack = $state.stacks | where id == $state.renameStackId | get -i 0
+  let rename_initial = if $rename_stack == null { "" } else { $rename_stack.name? | default "" }
   let ctx = {
     composeStackId: $state.composeStackId
     composeStackName: $compose_name
     editClipId: $state.editClipId
     editStackName: $edit_name
+    renameStackId: $state.renameStackId
     selectedStackId: $state.selectedStackId
     selectedClipId: $state.selectedClipId
     selectedStack: $stack
@@ -238,6 +254,8 @@ def view-model [state: record]: nothing -> record {
     editClipId: $state.editClipId
     editClip: $edit_clip
     editStackName: $edit_name
+    renameStackId: $state.renameStackId
+    renameInitial: $rename_initial
     bindings: $bindings
     stackActions: $stack_actions
     actions: ($actions | to json -r)
@@ -400,6 +418,24 @@ window.toggleTheme = function() {
         $text | .append clip.add --meta {stack_id: $ctx.id mime_type: "text/plain"} | ignore
       }
       .append compose.close --meta {} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+
+    # ---- rename (ephemeral modal mode; submits as stack.update) ----
+    (route {method: "POST" path-matches: "/stacks/:id/rename/open"} {|req ctx|
+      .append rename.open --meta {stack_id: $ctx.id} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+    (route {method: "POST" path: "/rename/cancel"} {|req ctx|
+      .append rename.close --meta {} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+    (route {method: "POST" path-matches: "/stacks/:id/rename/submit"} {|req ctx|
+      let name = $in | default "" | str trim
+      if not ($name | is-empty) {
+        .append stack.update --meta {id: $ctx.id name: $name} | ignore
+      }
+      .append rename.close --meta {} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
