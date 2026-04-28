@@ -78,6 +78,15 @@ button:hover > iconify-icon {
 .binding:hover .binding-label, .binding.is-hover .binding-label { opacity: 1; }
 .binding-keys { display: inline-flex; gap: .15rem; }
 
+/* Action panel rows: hover or keyboard-selected highlight. The kbd cluster
+ * stays distinguishable when the row goes dark. */
+.action-row:hover, .action-row.is-selected {
+  background: var(--primary-7);
+}
+.action-row:hover kbd, .action-row.is-selected kbd {
+  background: var(--primary-7-dim);
+}
+
 pre, code {
   font-family: var(--font-mono);
 }

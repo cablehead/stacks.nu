@@ -175,6 +175,29 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
   }
 }
 
+# Action panel (Cmd+K): flat list, ordered clip-then-stack. Each row's
+# `require` field gates visibility against the current selection (~/stacks's
+# canApply pattern). Returns the rows that should appear given ctx.
+def panel-actions-for [ctx: record]: nothing -> list {
+  let items = [
+    {action: "clip.new"          label: "New clip"     keys: (glyphs [N])         require: "stack"}
+    {action: "clip.edit"         label: "Edit clip"    keys: (glyphs [E])         require: "clip"}
+    {action: "clip.delete"       label: "Delete clip"  keys: (glyphs [Del])       require: "clip"}
+    {action: "stack.new"         label: "New stack"    keys: (glyphs [Shift N])   require: "always"}
+    {action: "stack.rename"      label: "Rename stack" keys: (glyphs [R])         require: "stack"}
+    {action: "stack.sort.toggle" label: "Toggle sort"  keys: []                   require: "stack"}
+    {action: "stack.delete"      label: "Delete stack" keys: (glyphs [Shift Del]) require: "stack"}
+  ]
+  $items | where {|x|
+    match $x.require {
+      "always" => true
+      "stack"  => ($ctx.selectedStackId != null)
+      "clip"   => ($ctx.selectedClipId != null)
+      _ => false
+    }
+  }
+}
+
 # Status bar (left side): stack-related affordances, each referencing an
 # action id. Empty list when there's no useful target.
 def stack-actions-for [mode: string, ctx: record]: nothing -> list {
@@ -239,6 +262,7 @@ def view-model [state: record]: nothing -> record {
   let keymap = keymap-for $state.mode $ctx
   let bindings = bindings-for $state.mode $ctx
   let stack_actions = stack-actions-for $state.mode $ctx
+  let panel_actions = panel-actions-for $ctx
   # Stacks ordered by recent activity (any event touching the stack or its clips).
   let stacks_sorted = $state.stacks | sort-by lastTouched | reverse
   {
@@ -258,6 +282,7 @@ def view-model [state: record]: nothing -> record {
     renameInitial: $rename_initial
     bindings: $bindings
     stackActions: $stack_actions
+    panelActions: $panel_actions
     actions: ($actions | to json -r)
     keymap: ($keymap | to json -r)
   }
@@ -296,6 +321,7 @@ def design-state [variant: string]: nothing -> record {
     "compose"          => ($base | update mode "compose" | update composeStackId "s1")
     "edit"             => ($base | update mode "edit"    | update editClipId "c1")
     "rename"           => ($base | update mode "rename"  | update renameStackId "s1")
+    "actions"          => ($base | update mode "actions")
     _ => $base
   }
 }
@@ -318,7 +344,7 @@ def design-tile-html [variant: string]: nothing -> string {
 }
 
 def design-page []: nothing -> any {
-  let variants = ["main" "main-empty-stack" "compose" "edit" "rename"]
+  let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions"]
   (
     HTML
     (
