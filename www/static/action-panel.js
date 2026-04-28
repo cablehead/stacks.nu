@@ -68,6 +68,20 @@
         e.preventDefault();
         fire(row.dataset.action);
       });
+      // Close on click outside the panel's inner box. Document-level so
+      // clicks on the status bar and other UI also dismiss. Self-cleans
+      // when the panel is morphed out of the DOM.
+      const inner = panel.firstElementChild;
+      const docHandler = (e) => {
+        if (!document.body.contains(panel)) {
+          document.removeEventListener("mousedown", docHandler);
+          return;
+        }
+        if (inner.contains(e.target)) return;
+        document.removeEventListener("mousedown", docHandler);
+        fetch("/actions/cancel", { method: "POST" });
+      };
+      document.addEventListener("mousedown", docHandler);
     },
   };
 })();
