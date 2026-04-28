@@ -199,6 +199,13 @@
         padding: .35rem;
       ">
         {% for row in panelActions %}
+        {% if row.groupStart %}
+        <div aria-hidden="true" style="
+          height: 1px;
+          background: var(--primary-7-dim);
+          margin: .35rem .6rem;
+        "></div>
+        {% endif %}
         <div
           class="action-row{% if loop.first %} is-selected{% endif %}"
           data-action="{{ row.action }}"

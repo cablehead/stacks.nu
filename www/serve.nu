@@ -76,35 +76,41 @@ def actions-for [mode: string, ctx: record]: nothing -> record {
       "rename.save":   (js-post-body $"/stacks/($ctx.renameStackId)/rename/submit" "document.querySelector('#rename-text').value")
       "rename.cancel": (js-post "/rename/cancel")
     }
-    _ => {
-      let core = {
-        "clip.next":  (js-post "/select/clip/down")
-        "clip.prev":  (js-post "/select/clip/up")
-        "stack.next": (js-post "/select/stack/down")
-        "stack.prev": (js-post "/select/stack/up")
-        # Client computes the name at fire-time so the timestamp is in the
-        # viewer's local tz, then never changes. ISO-ish 'sv-SE' formats as
-        # YYYY-MM-DD HH:MM:SS; we trim to minutes.
-        "stack.new":  (js-post-body "/stacks/new" "new Date().toLocaleString('sv-SE').slice(0,16)")
-      }
-      let with_n = if $ctx.selectedStackId != null {
-        $core | upsert "clip.new" (js-post $"/compose/open/($ctx.selectedStackId)")
-      } else { $core }
-      let with_e = if $ctx.selectedClipId != null {
-        $with_n
-        | upsert "clip.edit"   (js-post $"/editor/open/($ctx.selectedClipId)")
-        | upsert "clip.delete" (js-delete $"/clips/($ctx.selectedClipId)")
-      } else { $with_n }
-      if $ctx.selectedStack != null {
-        let next_sort = if $ctx.selectedStack.sort == "auto" { "manual" } else { "auto" }
-        let stack_label = $ctx.selectedStack.name? | default "this stack"
-        $with_e
-        | upsert "stack.sort.toggle" (js-post $"/stacks/($ctx.selectedStack.id)/sort/($next_sort)")
-        | upsert "stack.rename" (js-post $"/stacks/($ctx.selectedStack.id)/rename/open")
-        | upsert "stack.delete" (js-confirm-delete $"/stacks/($ctx.selectedStack.id)" $"Delete stack \"($stack_label)\"?")
-      } else { $with_e }
-    }
+    "actions" => (actions-main $ctx | upsert "actions.cancel" (js-post "/actions/cancel"))
+    _ => (actions-main $ctx)
   }
+}
+
+# Main-mode action registry. Reused unchanged by "actions" mode (the panel is
+# overlaid on main; clicking a row should be able to invoke any main action).
+def actions-main [ctx: record]: nothing -> record {
+  let core = {
+    "clip.next":  (js-post "/select/clip/down")
+    "clip.prev":  (js-post "/select/clip/up")
+    "stack.next": (js-post "/select/stack/down")
+    "stack.prev": (js-post "/select/stack/up")
+    # Client computes the name at fire-time so the timestamp is in the
+    # viewer's local tz, then never changes. ISO-ish 'sv-SE' formats as
+    # YYYY-MM-DD HH:MM:SS; we trim to minutes.
+    "stack.new":  (js-post-body "/stacks/new" "new Date().toLocaleString('sv-SE').slice(0,16)")
+    "actions.open": (js-post "/actions/open")
+  }
+  let with_n = if $ctx.selectedStackId != null {
+    $core | upsert "clip.new" (js-post $"/compose/open/($ctx.selectedStackId)")
+  } else { $core }
+  let with_e = if $ctx.selectedClipId != null {
+    $with_n
+    | upsert "clip.edit"   (js-post $"/editor/open/($ctx.selectedClipId)")
+    | upsert "clip.delete" (js-delete $"/clips/($ctx.selectedClipId)")
+  } else { $with_n }
+  if $ctx.selectedStack != null {
+    let next_sort = if $ctx.selectedStack.sort == "auto" { "manual" } else { "auto" }
+    let stack_label = $ctx.selectedStack.name? | default "this stack"
+    $with_e
+    | upsert "stack.sort.toggle" (js-post $"/stacks/($ctx.selectedStack.id)/sort/($next_sort)")
+    | upsert "stack.rename" (js-post $"/stacks/($ctx.selectedStack.id)/rename/open")
+    | upsert "stack.delete" (js-confirm-delete $"/stacks/($ctx.selectedStack.id)" $"Delete stack \"($stack_label)\"?")
+  } else { $with_e }
 }
 
 # Keyboard triggers: combo -> action id. Same combo normalization as keys.js
@@ -114,27 +120,31 @@ def keymap-for [mode: string, ctx: record]: nothing -> record {
     "compose" => {"cmd+enter": "compose.save", "escape": "compose.cancel"}
     "edit" => {"cmd+enter": "edit.save", "escape": "edit.cancel"}
     "rename" => {"enter": "rename.save", "cmd+enter": "rename.save", "escape": "rename.cancel"}
-    _ => {
-      let base = {
-        "j": "clip.next", "k": "clip.prev"
-        "shift+j": "stack.next", "shift+k": "stack.prev"
-        "shift+n": "stack.new"
-      }
-      let with_stack = if $ctx.selectedStackId != null {
-        $base
-        | upsert "n" "clip.new"
-        | upsert "r" "stack.rename"
-        | upsert "shift+delete"    "stack.delete"
-        | upsert "shift+backspace" "stack.delete"
-      } else { $base }
-      if $ctx.selectedClipId != null {
-        $with_stack
-        | upsert "e" "clip.edit"
-        | upsert "delete"    "clip.delete"
-        | upsert "backspace" "clip.delete"
-      } else { $with_stack }
-    }
+    "actions" => {"escape": "actions.cancel", "cmd+k": "actions.cancel"}
+    _ => (keymap-main $ctx)
   }
+}
+
+def keymap-main [ctx: record]: nothing -> record {
+  let base = {
+    "j": "clip.next", "k": "clip.prev"
+    "shift+j": "stack.next", "shift+k": "stack.prev"
+    "shift+n": "stack.new"
+    "cmd+k": "actions.open"
+  }
+  let with_stack = if $ctx.selectedStackId != null {
+    $base
+    | upsert "n" "clip.new"
+    | upsert "r" "stack.rename"
+    | upsert "shift+delete"    "stack.delete"
+    | upsert "shift+backspace" "stack.delete"
+  } else { $base }
+  if $ctx.selectedClipId != null {
+    $with_stack
+    | upsert "e" "clip.edit"
+    | upsert "delete"    "clip.delete"
+    | upsert "backspace" "clip.delete"
+  } else { $with_stack }
 }
 
 # Status bar (right side): visible bindings, each referencing an action id.
@@ -152,26 +162,16 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
       {action: "rename.save"   label: "save"   keys: (glyphs [Enter])}
       {action: "rename.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
-    _ => {
-      let core = [
-        {action: "clip.next"  label: "next clip"  keys: (glyphs [J])}
-        {action: "clip.prev"  label: "prev clip"  keys: (glyphs [K])}
-        {action: "stack.next" label: "next stack" keys: (glyphs [Shift J])}
-        {action: "stack.prev" label: "prev stack" keys: (glyphs [Shift K])}
-        {action: "stack.new"  label: "new stack"  keys: (glyphs [Shift N])}
-      ]
-      let with_stack = if $ctx.selectedStackId != null {
-        $core
-        | append {action: "clip.new"     label: "new clip"     keys: (glyphs [N])}
-        | append {action: "stack.rename" label: "rename stack" keys: (glyphs [R])}
-        | append {action: "stack.delete" label: "delete stack" keys: (glyphs [Shift Del])}
-      } else { $core }
-      if $ctx.selectedClipId != null {
-        $with_stack
-        | append {action: "clip.edit"   label: "edit clip"   keys: (glyphs [E])}
-        | append {action: "clip.delete" label: "delete clip" keys: (glyphs [Del])}
-      } else { $with_stack }
-    }
+    "actions" => [
+      {action: "actions.cancel" label: "close" keys: (glyphs [Esc])}
+    ]
+    _ => [
+      {action: "clip.next"    label: "next clip"  keys: (glyphs [J])}
+      {action: "clip.prev"    label: "prev clip"  keys: (glyphs [K])}
+      {action: "stack.next"   label: "next stack" keys: (glyphs [Shift J])}
+      {action: "stack.prev"   label: "prev stack" keys: (glyphs [Shift K])}
+      {action: "actions.open" label: "actions"    keys: (glyphs [Cmd K])}
+    ]
   }
 }
 
@@ -180,21 +180,27 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
 # canApply pattern). Returns the rows that should appear given ctx.
 def panel-actions-for [ctx: record]: nothing -> list {
   let items = [
-    {action: "clip.new"          label: "New clip"     keys: (glyphs [N])         require: "stack"}
-    {action: "clip.edit"         label: "Edit clip"    keys: (glyphs [E])         require: "clip"}
-    {action: "clip.delete"       label: "Delete clip"  keys: (glyphs [Del])       require: "clip"}
-    {action: "stack.new"         label: "New stack"    keys: (glyphs [Shift N])   require: "always"}
-    {action: "stack.rename"      label: "Rename stack" keys: (glyphs [R])         require: "stack"}
-    {action: "stack.sort.toggle" label: "Toggle sort"  keys: []                   require: "stack"}
-    {action: "stack.delete"      label: "Delete stack" keys: (glyphs [Shift Del]) require: "stack"}
+    {action: "clip.new"          label: "New clip"     keys: (glyphs [N])         target: "clip"  require: "stack"}
+    {action: "clip.edit"         label: "Edit clip"    keys: (glyphs [E])         target: "clip"  require: "clip"}
+    {action: "clip.delete"       label: "Delete clip"  keys: (glyphs [Del])       target: "clip"  require: "clip"}
+    {action: "stack.new"         label: "New stack"    keys: (glyphs [Shift N])   target: "stack" require: "always"}
+    {action: "stack.rename"      label: "Rename stack" keys: (glyphs [R])         target: "stack" require: "stack"}
+    {action: "stack.sort.toggle" label: "Toggle sort"  keys: []                   target: "stack" require: "stack"}
+    {action: "stack.delete"      label: "Delete stack" keys: (glyphs [Shift Del]) target: "stack" require: "stack"}
   ]
-  $items | where {|x|
+  let visible = $items | where {|x|
     match $x.require {
       "always" => true
       "stack"  => ($ctx.selectedStackId != null)
       "clip"   => ($ctx.selectedClipId != null)
       _ => false
     }
+  }
+  # Mark each row that starts a new target group so the template can insert
+  # a divider before it. The first row never gets the flag.
+  $visible | enumerate | each {|e|
+    let prev = if $e.index == 0 { null } else { $visible | get ($e.index - 1) | get target }
+    $e.item | upsert groupStart (($e.index > 0) and ($e.item.target != $prev))
   }
 }
 
@@ -219,6 +225,7 @@ def mode-name-for [mode: string, ctx: record]: nothing -> string {
     "compose" => $"New clip in ($ctx.composeStackName)"
     "edit" => $"Edit clip in ($ctx.editStackName)"
     "rename" => "Rename stack"
+    "actions" => "Actions"
     _ => {
       if $ctx.selectedStack == null { "Stacks" } else { ($ctx.selectedStack.name? | default "Untitled") }
     }
@@ -523,6 +530,16 @@ window.toggleTheme = function() {
         $text | .append clip.add --meta {stack_id: $ctx.id mime_type: "text/plain"} | ignore
       }
       .append compose.close --meta {} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+
+    # ---- actions panel (ephemeral modal mode; pure overlay, no submit) ----
+    (route {method: "POST" path: "/actions/open"} {|req ctx|
+      .append actions.open --meta {} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+    (route {method: "POST" path: "/actions/cancel"} {|req ctx|
+      .append actions.close --meta {} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 

@@ -24,7 +24,7 @@
 #     stacks: [{id, name, sort, lastTouched, clips: [{id, hash, mime_type, position, lastTouched, versions}]}]
 #     selectedStackId: string|null
 #     selectedClipId:  string|null
-#     mode:            "main" | "compose" | "edit" | "rename"
+#     mode:            "main" | "compose" | "edit" | "rename" | "actions"
 #     composeStackId:  string|null
 #     editClipId:      string|null
 #     renameStackId:   string|null
@@ -64,6 +64,8 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
     "editor.close" => ($state | update mode "main" | update editClipId null)
     "rename.open" => ($state | update mode "rename" | update renameStackId ($frame.meta?.stack_id?))
     "rename.close" => ($state | update mode "main" | update renameStackId null)
+    "actions.open" => ($state | update mode "actions")
+    "actions.close" => ($state | update mode "main")
     _ => $state
   }
   $s | update frameId ($frame.id? | default $s.frameId)
