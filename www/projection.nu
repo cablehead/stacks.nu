@@ -254,7 +254,7 @@ def clip-delete [state: record, frame: record] {
   $state | update stacks $stacks | update selectedClipId $new_selected
 }
 
-# Cycle by `action`, jump by `id`.
+# Cycle by `action`, jump by `id`. "top" jumps to the first id in render order.
 def cycle [ids: list, current: any, action: string]: nothing -> any {
   if ($ids | is-empty) { return null }
   let n = $ids | length
@@ -263,6 +263,7 @@ def cycle [ids: list, current: any, action: string]: nothing -> any {
   match $action {
     "down" => ($ids | get (($cur + 1) mod $n))
     "up" => ($ids | get (($cur - 1 + $n) mod $n))
+    "top" => ($ids | first)
     _ => $current
   }
 }

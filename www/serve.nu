@@ -87,8 +87,10 @@ def actions-main [ctx: record]: nothing -> record {
   let core = {
     "clip.next":  (js-post "/select/clip/down")
     "clip.prev":  (js-post "/select/clip/up")
+    "clip.top":   (js-post "/select/clip/top")
     "stack.next": (js-post "/select/stack/down")
     "stack.prev": (js-post "/select/stack/up")
+    "stack.top":  (js-post "/select/stack/top")
     # Client computes the name at fire-time so the timestamp is in the
     # viewer's local tz, then never changes. ISO-ish 'sv-SE' formats as
     # YYYY-MM-DD HH:MM:SS; we trim to minutes.
@@ -129,7 +131,9 @@ def keymap-main [ctx: record]: nothing -> record {
   let base = {
     "j": "clip.next", "k": "clip.prev"
     "ctrl+n": "clip.next", "ctrl+p": "clip.prev"
+    "0": "clip.top"
     "shift+j": "stack.next", "shift+k": "stack.prev"
+    "shift+0": "stack.top", "shift+)": "stack.top"
     "shift+n": "stack.new"
     "cmd+k": "actions.open"
   }
@@ -500,6 +504,10 @@ window.toggleTheme = function() {
       .append stack.select --meta {action: "up"} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
+    (route {method: "POST" path: "/select/stack/top"} {|req ctx|
+      .append stack.select --meta {action: "top"} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
     (route {method: "POST" path-matches: "/select/stack/:id"} {|req ctx|
       .append stack.select --meta {id: $ctx.id} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
@@ -510,6 +518,10 @@ window.toggleTheme = function() {
     })
     (route {method: "POST" path: "/select/clip/up"} {|req ctx|
       .append clip.select --meta {action: "up"} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+    (route {method: "POST" path: "/select/clip/top"} {|req ctx|
+      .append clip.select --meta {action: "top"} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
     (route {method: "POST" path-matches: "/select/clip/:id"} {|req ctx|
