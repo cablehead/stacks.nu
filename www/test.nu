@@ -219,6 +219,44 @@ let other_gone = $DEL_FRAMES | append [
 assert ($other_gone.selectedClipId == "c2") $"unrelated delete should not move the cursor"
 print "   ok"
 
+print "5i. stack.delete preserves cursor position across stacks"
+# Three stacks; render order follows lastTouched-desc. With no other activity,
+# that's reverse insertion: s3, s2, s1. Cursor stays in the same slot.
+const STACK_DEL_FRAMES = [
+  {topic: "stack.add" id: "s1" hash: null meta: {name: "A" sort: "auto"}}
+  {topic: "stack.add" id: "s2" hash: null meta: {name: "B" sort: "auto"}}
+  {topic: "stack.add" id: "s3" hash: null meta: {name: "C" sort: "auto"}}
+]
+
+# Render order: [s3, s2, s1]. Selecting s2 (slot 1), deleting s2 -> slot 1 is now s1.
+let mid = $STACK_DEL_FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "s2"}}
+  {topic: "stack.delete" id: "x" hash: null meta: {id: "s2"}}
+] | projection project
+assert ($mid.selectedStackId == "s1") $"slot kept; expected s1 got ($mid.selectedStackId)"
+
+# Selecting s1 (bottom slot), deleting s1 -> falls back to the new last (s2).
+let bottom = $STACK_DEL_FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "s1"}}
+  {topic: "stack.delete" id: "x" hash: null meta: {id: "s1"}}
+] | projection project
+assert ($bottom.selectedStackId == "s2") $"bottom falls back; expected s2 got ($bottom.selectedStackId)"
+
+# Selecting s3 (top slot), deleting s3 -> top slot promotes s2.
+let top = $STACK_DEL_FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "s3"}}
+  {topic: "stack.delete" id: "x" hash: null meta: {id: "s3"}}
+] | projection project
+assert ($top.selectedStackId == "s2") $"top slot promotes s2; got ($top.selectedStackId)"
+
+# Deleting an unselected stack leaves the cursor alone.
+let other = $STACK_DEL_FRAMES | append [
+  {topic: "stack.select" id: "x" hash: null meta: {id: "s2"}}
+  {topic: "stack.delete" id: "x" hash: null meta: {id: "s3"}}
+] | projection project
+assert ($other.selectedStackId == "s2") $"unrelated delete should not move the cursor"
+print "   ok"
+
 print "5f. editor.open / editor.close toggle mode + editClipId"
 let editing = $FRAMES | append [
   {topic: "editor.open"  id: "u4" hash: null meta: {clip_id: "c1"}}

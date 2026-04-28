@@ -116,7 +116,25 @@ def stack-update [state: record, frame: record] {
 
 def stack-delete [state: record, frame: record] {
   let id = $frame.meta.id
-  $state | update stacks ($state.stacks | where id != $id)
+  let stacks = $state.stacks | where id != $id
+  # Preserve cursor position across stacks: if the deleted stack was selected,
+  # take whatever now sits in the same slot (render order is lastTouched-desc),
+  # falling back to the last stack when the deleted one was the bottom.
+  let new_selected = if $state.selectedStackId != $id {
+    $state.selectedStackId
+  } else {
+    let pre = $state.stacks | sort-by lastTouched | reverse | get id
+    let idx = $pre | enumerate | where item == $id | get index.0?
+    let post = $pre | where {|x| $x != $id }
+    if $idx == null or ($post | is-empty) {
+      null
+    } else if $idx >= ($post | length) {
+      $post | last
+    } else {
+      $post | get $idx
+    }
+  }
+  $state | update stacks $stacks | update selectedStackId $new_selected
 }
 
 def clip-add [state: record, frame: record] {
