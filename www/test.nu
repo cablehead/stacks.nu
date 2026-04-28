@@ -317,11 +317,15 @@ assert ($sel_frame.topic == "stack.select")
 assert ($sel_frame.meta.id == $mod_stack.id)
 print "   ok"
 
-print "12. serve.nu: POST /stacks/new creates a timestamped stack and selects it"
+print "12. serve.nu: POST /stacks/new takes the name from the body and selects it"
+"2026-04-28 14:32" | do $handler {method: "POST" path: "/stacks/new" headers: {} query: {}}
+let named = .cat | where topic == "stack.add" | last
+assert ($named.meta.name == "2026-04-28 14:32") $"got ($named.meta.name?)"
+
+# Empty body -> name is null (left to the caller; the route doesn't fabricate).
 do $handler {method: "POST" path: "/stacks/new" headers: {} query: {}}
-let new_stacks = .cat | where topic == "stack.add" | get meta.name
-let stamped = $new_stacks | where {|n| $n =~ '^\d{4}-\d{2}-\d{2}'} | get -i 0
-assert ($stamped != null) "/stacks/new should produce a YYYY-MM-DD HH:MM name"
+let unnamed = .cat | where topic == "stack.add" | last
+assert ($unnamed.meta.name? == null) "empty body should leave the name null"
 print "   ok"
 
 print "12b. serve.nu: /editor/submit emits clip.update, clip identity stays stable"
@@ -353,7 +357,7 @@ assert ($live_clip.position == "a") "manual position survives"
 assert ($live_clip.hash == ($updates | first | get hash)) "projection tracks the latest hash"
 print "   ok"
 
-print "13. serve.nu: status bar splits into stack-actions (left) and bindings (right)"
+print "13. serve.nu: actions registry, keymap, and status bar all reference action ids"
 let template = "/root/stacks.nu/www/templates/three-pane.html.j2"
 let main_view = {
   stacks: [{id: "s1" name: "Inbox" sort: "auto" clips: []}]
@@ -363,21 +367,24 @@ let main_view = {
   composeStackId: null composeStackName: ""
   editClipId: null editClip: null editStackName: ""
   bindings: [
-    {combo: "j"       label: "next clip" keys: ["J"]    action: "/select/clip/down"}
-    {combo: "shift+n" label: "new stack" keys: ["\u{21E7}" "N"] action: "/stacks/new"}
+    {action: "clip.next" label: "next clip" keys: ["J"]}
+    {action: "stack.new" label: "new stack" keys: ["\u{21E7}" "N"]}
   ]
   stackActions: [
-    {label: "sort: auto" icon: "lucide:arrow-down-narrow-wide" url: "/stacks/s1/sort/manual"}
+    {action: "stack.sort.toggle" label: "sort: auto" icon: "lucide:arrow-down-narrow-wide"}
   ]
-  keymap: '{"j":"/select/clip/down","shift+n":"/stacks/new"}'
+  actions: '{"clip.next":"fetch(\"/select/clip/down\",{method:\"POST\"})","stack.new":"fetch(\"/stacks/new\",{method:\"POST\",body:new Date().toLocaleString(\"sv-SE\").slice(0,16)})","stack.sort.toggle":"fetch(\"/stacks/s1/sort/manual\",{method:\"POST\"})"}'
+  keymap: '{"j":"clip.next","shift+n":"stack.new"}'
 }
 let main_render = $main_view | .mj $template
+assert ($main_render | str contains 'data-actions=') "main render should expose data-actions"
 assert ($main_render | str contains 'data-keymap=') "main render should expose data-keymap"
-assert ($main_render | str contains '/stacks/new') "keymap should include /stacks/new"
+assert ($main_render | str contains "window.actions.invoke('clip.next')") "binding click should invoke action by id"
+assert ($main_render | str contains "window.actions.invoke('stack.new')") "stack.new binding should be wired"
+assert ($main_render | str contains "window.actions.invoke('stack.sort.toggle')") "stack-actions click should invoke action by id"
 assert ($main_render | str contains '<footer aria-label="Status"') "status footer should be present"
 assert ($main_render | str contains '>Inbox<') "status footer should show the stack name"
 assert ($main_render | str contains 'iconify-icon') "stack actions should use iconify icons"
-assert ($main_render | str contains '/stacks/s1/sort/manual') "stack actions should include the sort toggle"
 assert ($main_render | str contains 'next clip') "status footer should list binding labels"
 assert ($main_render | str contains "\u{21E7}") "shift glyph should appear in keys"
 
@@ -386,14 +393,15 @@ let compose_view = $main_view
   | update modeName "New clip in Inbox"
   | update composeStackId "s1" | update composeStackName "Inbox"
   | update bindings [
-      {combo: "cmd+enter" label: "save"   keys: ["\u{2318}" "\u{21B5}"] action: {url: "/compose/submit/s1" source: "#compose-text"}}
-      {combo: "escape"    label: "cancel" keys: ["\u{238B}"]            action: "/compose/cancel"}
+      {action: "compose.save"   label: "save"   keys: ["\u{2318}" "\u{21B5}"]}
+      {action: "compose.cancel" label: "cancel" keys: ["ESC"]}
     ]
   | update stackActions []
-  | update keymap '{"escape":"/compose/cancel","cmd+enter":{"url":"/compose/submit/s1","source":"#compose-text"}}'
+  | update actions '{"compose.save":"fetch(\"/compose/submit/s1\",{method:\"POST\",body:document.querySelector(\"#compose-text\").value})","compose.cancel":"fetch(\"/compose/cancel\",{method:\"POST\"})"}'
+  | update keymap '{"cmd+enter":"compose.save","escape":"compose.cancel"}'
 let compose_render = $compose_view | .mj $template
 assert ($compose_render | str contains 'compose-text') "compose render should include the textarea"
-assert ($compose_render | str contains '/compose/submit/s1') "compose keymap should target the stack"
+assert ($compose_render | str contains "window.actions.invoke('compose.save')") "compose save binding should reference action id"
 assert ($compose_render | str contains '>New clip in Inbox<') "status footer should show compose mode name"
 assert ($compose_render | str contains 'save') "status footer should list compose actions"
 print "   ok"

@@ -1,20 +1,17 @@
-// One window keydown listener. Reads the active keymap from `<main>`'s
-// `data-keymap` attribute on every keystroke; the SSE patch swaps that
-// attribute when the projection's mode changes.
+// Action registry + key bindings, both authored server-side and shipped on
+// `<main>` as JSON:
 //
-// keymap shape (JSON):
-//   {
-//     "<combo>": "<url>"                       // POST <url>, no body
-//     "<combo>": {url, source}                 // POST <url>, body = el.value of `source` selector
-//   }
+//   data-actions='{"<id>": "<js-string>", ...}'
+//   data-keymap='{"<combo>": "<id>", ...}'
 //
-// `<combo>` is built from the event in a fixed order: cmd, ctrl, alt, shift,
-// then the key. Letters are lowercased so `shift+j` matches Shift+J without
-// the upstream on-keys plugin's case-mismatch bug.
+// Triggers (key press OR status-bar click) reference an action id.
+// `window.actions.invoke(id)` evaluates the JS string. The action strings
+// are plain JS -- typically `fetch(...)` -- so adding new behavior is just
+// a matter of writing the JS server-side.
 //
-// `window.kx.fire(combo)` invokes a binding by its combo string. Used by
-// the status bar so that clicking a binding fires the same action a
-// keypress would.
+// Combo strings are built in fixed order: cmd, ctrl, alt, shift, then the
+// key. Letters are lowercased so `shift+j` matches Shift+J without the
+// upstream on-keys plugin's case-mismatch bug.
 
 (function () {
   function comboKey(e) {
@@ -30,39 +27,28 @@
     return parts.join("+");
   }
 
-  function dispatch(action) {
-    const url = typeof action === "string" ? action : action.url;
-    let body;
-    if (typeof action === "object" && action.source) {
-      const el = document.querySelector(action.source);
-      body = el ? el.value : "";
-    }
-    fetch(url, { method: "POST", body });
-  }
-
-  function actionFor(combo) {
+  function readJson(name) {
     const main = document.querySelector("main");
-    const raw = main && main.dataset.keymap;
-    if (!raw) return null;
-    try {
-      const m = JSON.parse(raw);
-      return combo in m ? m[combo] : null;
-    } catch (_) {
-      return null;
-    }
+    const raw = main && main.dataset[name];
+    if (!raw) return {};
+    try { return JSON.parse(raw); } catch (_) { return {}; }
   }
 
-  window.kx = {
+  window.actions = {
+    invoke: function (id) {
+      const js = readJson("actions")[id];
+      if (js) new Function(js)();
+    },
     fire: function (combo) {
-      const action = actionFor(combo);
-      if (action != null) dispatch(action);
+      const id = readJson("keymap")[combo];
+      if (id) window.actions.invoke(id);
     },
   };
 
   document.addEventListener("keydown", function (e) {
-    const action = actionFor(comboKey(e));
-    if (action == null) return;
+    const id = readJson("keymap")[comboKey(e)];
+    if (!id) return;
     e.preventDefault();
-    dispatch(action);
+    window.actions.invoke(id);
   });
 })();

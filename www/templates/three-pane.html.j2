@@ -1,4 +1,5 @@
 <main
+  data-actions='{{ actions | safe }}'
   data-keymap='{{ keymap | safe }}'
   style="
     display: flex;
@@ -31,7 +32,7 @@
         <li>
           <button
             type="button"
-            data-on:mousedown="@post('/select/stack/{{ stack.id }}')"
+            onmousedown="fetch('/select/stack/{{ stack.id }}', {method:'POST'})"
             style="
               display: block;
               width: 100%;
@@ -74,7 +75,7 @@
       <li>
         <button
           type="button"
-          data-on:mousedown="@post('/select/clip/{{ clip.id }}')"
+          onmousedown="fetch('/select/clip/{{ clip.id }}', {method:'POST'})"
           style="
             display: block;
             width: 100%;
@@ -206,7 +207,7 @@
       {% for a in stackActions %}
         <button
           type="button"
-          data-on:mousedown="@post('{{ a.url | safe }}')"
+          onmousedown="window.actions.invoke('{{ a.action | safe }}')"
           title="{{ a.label }}"
           aria-label="{{ a.label }}"
           style="
@@ -230,7 +231,7 @@
       {% for b in bindings %}
         <span
           class="binding"
-          onmousedown="window.kx.fire('{{ b.combo | safe }}')"
+          onmousedown="window.actions.invoke('{{ b.action | safe }}')"
         ><span class="binding-label">{{ b.label }}</span><span class="binding-keys">{% for k in b.keys %}<kbd>{{ k }}</kbd>{% endfor %}</span></span>
       {% endfor %}
       <span aria-hidden="true" style="

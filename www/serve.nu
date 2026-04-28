@@ -41,58 +41,114 @@ def glyphs [keys: list<string>]: nothing -> list<string> {
   $keys | each {|k| $KEY_GLYPH | get -i $k | default $k }
 }
 
-# Single source of truth for "what keys exist in this mode" -- drives both
-# the data-keymap (for keys.js) and the status bar (for the user). Each
-# binding has a combo string (matching keys.js's `cmd+ctrl+alt+shift+key`
-# normalization), a short label, displayable key glyphs, and the action
-# (URL string or {url, source} record).
+# JS snippets the client evaluates. URL string interpolation happens here so
+# the registry value is exactly the JS the browser runs -- no client-side
+# template language. POST with no body, or with an arbitrary body expression.
+def js-post [url: string]: nothing -> string {
+  "fetch(" + ($url | to json -r) + ", {method:'POST'})"
+}
+def js-post-body [url: string, body_expr: string]: nothing -> string {
+  "fetch(" + ($url | to json -r) + ", {method:'POST', body: " + $body_expr + "})"
+}
+
+# Action registry. Action id -> JS string. Triggers (keymap, status-bar
+# buttons) reference actions by id; both invoke window.actions.invoke(id),
+# which evaluates the JS. This decouples WHAT (action) from HOW IT'S TRIGGERED
+# (key, click).
+def actions-for [mode: string, ctx: record]: nothing -> record {
+  match $mode {
+    "compose" => {
+      "compose.save":   (js-post-body $"/compose/submit/($ctx.composeStackId)" "document.querySelector('#compose-text').value")
+      "compose.cancel": (js-post "/compose/cancel")
+    }
+    "edit" => {
+      "edit.save":   (js-post-body $"/editor/submit/($ctx.editClipId)" "document.querySelector('#compose-text').value")
+      "edit.cancel": (js-post "/editor/cancel")
+    }
+    _ => {
+      let core = {
+        "clip.next":  (js-post "/select/clip/down")
+        "clip.prev":  (js-post "/select/clip/up")
+        "stack.next": (js-post "/select/stack/down")
+        "stack.prev": (js-post "/select/stack/up")
+        # Client computes the name at fire-time so the timestamp is in the
+        # viewer's local tz, then never changes. ISO-ish 'sv-SE' formats as
+        # YYYY-MM-DD HH:MM:SS; we trim to minutes.
+        "stack.new":  (js-post-body "/stacks/new" "new Date().toLocaleString('sv-SE').slice(0,16)")
+      }
+      let with_n = if $ctx.selectedStackId != null {
+        $core | upsert "clip.new" (js-post $"/compose/open/($ctx.selectedStackId)")
+      } else { $core }
+      let with_e = if $ctx.selectedClipId != null {
+        $with_n | upsert "clip.edit" (js-post $"/editor/open/($ctx.selectedClipId)")
+      } else { $with_n }
+      if $ctx.selectedStack != null {
+        let next_sort = if $ctx.selectedStack.sort == "auto" { "manual" } else { "auto" }
+        $with_e | upsert "stack.sort.toggle" (js-post $"/stacks/($ctx.selectedStack.id)/sort/($next_sort)")
+      } else { $with_e }
+    }
+  }
+}
+
+# Keyboard triggers: combo -> action id. Same combo normalization as keys.js
+# (`cmd+ctrl+alt+shift+key`, letters lowercased).
+def keymap-for [mode: string, ctx: record]: nothing -> record {
+  match $mode {
+    "compose" => {"cmd+enter": "compose.save", "escape": "compose.cancel"}
+    "edit" => {"cmd+enter": "edit.save", "escape": "edit.cancel"}
+    _ => {
+      let base = {
+        "j": "clip.next", "k": "clip.prev"
+        "shift+j": "stack.next", "shift+k": "stack.prev"
+        "shift+n": "stack.new"
+      }
+      let with_n = if $ctx.selectedStackId != null { $base | upsert "n" "clip.new" } else { $base }
+      if $ctx.selectedClipId != null { $with_n | upsert "e" "clip.edit" } else { $with_n }
+    }
+  }
+}
+
+# Status bar (right side): visible bindings, each referencing an action id.
 def bindings-for [mode: string, ctx: record]: nothing -> list {
   match $mode {
     "compose" => [
-      {combo: "cmd+enter" label: "save"   keys: (glyphs [Cmd Enter]) action: {url: $"/compose/submit/($ctx.composeStackId)" source: "#compose-text"}}
-      {combo: "escape"    label: "cancel" keys: (glyphs [Esc])       action: "/compose/cancel"}
+      {action: "compose.save"   label: "save"   keys: (glyphs [Cmd Enter])}
+      {action: "compose.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
     "edit" => [
-      {combo: "cmd+enter" label: "save"   keys: (glyphs [Cmd Enter]) action: {url: $"/editor/submit/($ctx.editClipId)" source: "#compose-text"}}
-      {combo: "escape"    label: "cancel" keys: (glyphs [Esc])       action: "/editor/cancel"}
+      {action: "edit.save"   label: "save"   keys: (glyphs [Cmd Enter])}
+      {action: "edit.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
     _ => {
       let core = [
-        {combo: "j"       label: "next clip"   keys: (glyphs [J])       action: "/select/clip/down"}
-        {combo: "k"       label: "prev clip"   keys: (glyphs [K])       action: "/select/clip/up"}
-        {combo: "shift+j" label: "next stack"  keys: (glyphs [Shift J]) action: "/select/stack/down"}
-        {combo: "shift+k" label: "prev stack"  keys: (glyphs [Shift K]) action: "/select/stack/up"}
-        {combo: "shift+n" label: "new stack"   keys: (glyphs [Shift N]) action: "/stacks/new"}
+        {action: "clip.next"  label: "next clip"  keys: (glyphs [J])}
+        {action: "clip.prev"  label: "prev clip"  keys: (glyphs [K])}
+        {action: "stack.next" label: "next stack" keys: (glyphs [Shift J])}
+        {action: "stack.prev" label: "prev stack" keys: (glyphs [Shift K])}
+        {action: "stack.new"  label: "new stack"  keys: (glyphs [Shift N])}
       ]
-      # `n` and `e` only bind when there's a target -- the URL carries the
-      # id so handlers don't re-derive from ephemeral state (which a fresh
-      # `.cat` snapshot can't see).
       let with_n = if $ctx.selectedStackId != null {
-        $core | append {combo: "n" label: "new clip" keys: (glyphs [N]) action: $"/compose/open/($ctx.selectedStackId)"}
+        $core | append {action: "clip.new" label: "new clip" keys: (glyphs [N])}
       } else { $core }
       if $ctx.selectedClipId != null {
-        $with_n | append {combo: "e" label: "edit clip" keys: (glyphs [E]) action: $"/editor/open/($ctx.selectedClipId)"}
+        $with_n | append {action: "clip.edit" label: "edit clip" keys: (glyphs [E])}
       } else { $with_n }
     }
   }
 }
 
-# Stack-related affordances shown on the LEFT of the status bar in main mode.
-# Each is {label, icon, url} -- icon is an iconify name; url is POSTed on
-# mousedown. Empty list when there's no useful target.
+# Status bar (left side): stack-related affordances, each referencing an
+# action id. Empty list when there's no useful target.
 def stack-actions-for [mode: string, ctx: record]: nothing -> list {
   if $mode != "main" { return [] }
   let stack = $ctx.selectedStack
   if $stack == null { return [] }
-  let next_sort = if $stack.sort == "auto" { "manual" } else { "auto" }
-  let sort_icon = if $stack.sort == "auto" {
+  let icon = if $stack.sort == "auto" {
     "lucide:arrow-down-narrow-wide"
   } else {
     "lucide:list-ordered"
   }
-  [
-    {label: $"sort: ($stack.sort)" icon: $sort_icon url: $"/stacks/($stack.id)/sort/($next_sort)"}
-  ]
+  [{action: "stack.sort.toggle" label: $"sort: ($stack.sort)" icon: $icon}]
 }
 
 # What goes on the LEFT of the status bar -- the stack name in main mode,
@@ -105,11 +161,6 @@ def mode-name-for [mode: string, ctx: record]: nothing -> string {
       if $ctx.selectedStack == null { "Stacks" } else { $ctx.selectedStack.name }
     }
   }
-}
-
-# Pack the bindings list into the `{combo: action}` json that keys.js reads.
-def keymap-for [bindings: list]: nothing -> string {
-  $bindings | reduce -f {} {|b, acc| $acc | upsert $b.combo $b.action } | to json -r
 }
 
 # Locate a clip across all stacks; returns {clip, stackName} or null.
@@ -142,6 +193,8 @@ def view-model [state: record]: nothing -> record {
     selectedClipId: $state.selectedClipId
     selectedStack: $stack
   }
+  let actions = actions-for $state.mode $ctx
+  let keymap = keymap-for $state.mode $ctx
   let bindings = bindings-for $state.mode $ctx
   let stack_actions = stack-actions-for $state.mode $ctx
   # Stacks ordered by recent activity (any event touching the stack or its clips).
@@ -161,7 +214,8 @@ def view-model [state: record]: nothing -> record {
     editStackName: $edit_name
     bindings: $bindings
     stackActions: $stack_actions
-    keymap: (keymap-for $bindings)
+    actions: ($actions | to json -r)
+    keymap: ($keymap | to json -r)
   }
 }
 
@@ -347,10 +401,12 @@ window.toggleTheme = function() {
 
     # ---- mutations ----
     (route {method: "POST" path: "/stacks/new"} {|req ctx|
-      # Bare-keymap action: create a stack with a default timestamp name and
-      # select it. Rename comes via PATCH /stacks/:id.
-      let name = date now | format date "%Y-%m-%d %H:%M"
-      let frame = .append stack.add --meta {name: $name sort: "auto"}
+      # Bare-keymap action: create a stack and select it. The client supplies
+      # the name (a timestamp formatted in the viewer's local tz on shift-N);
+      # an empty body leaves the name null. Rename comes via PATCH /stacks/:id.
+      let name = $in | default "" | str trim
+      let meta = if ($name | is-empty) { {sort: "auto"} } else { {name: $name sort: "auto"} }
+      let frame = .append stack.add --meta $meta
       .append stack.select --meta {id: $frame.id} --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
