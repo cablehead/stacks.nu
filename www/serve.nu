@@ -13,6 +13,7 @@ const script_dir = path self | path dirname
 
 use http-nu/router *
 use http-nu/html *
+use http-nu/datastar *
 
 use ./projection.nu
 
@@ -213,8 +214,6 @@ def shots-page []: nothing -> any {
 }
 
 def index-page []: nothing -> any {
-  # Path is fixed by `http-nu --datastar`; we hardcode it here so the page
-  # is also renderable from `http-nu eval` (no --datastar; no $DATASTAR_JS_PATH).
   (
     HTML
     (
@@ -235,7 +234,7 @@ def index-page []: nothing -> any {
       (TITLE "stacks.nu")
       (LINK {rel: "stylesheet" href: "http://localhost:7331/assets/css/stellar"})
       (LINK {rel: "stylesheet" href: "/base.css"})
-      (SCRIPT {type: "module" src: "/datastar@1.0.0-RC.8.js"})
+      (SCRIPT {type: "module" src: $DATASTAR_JS_PATH})
       # Stellar dev-loop: subscribes to the local Stellar server's live-refresh
       # SSE so token edits restyle the page without a reload. Harmless if the
       # endpoint is offline (the @get just fails silently).
