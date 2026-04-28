@@ -346,7 +346,7 @@ def design-tile-html [variant: string]: nothing -> string {
   let main_html = view-model $state | .mj ($script_dir | path join "templates/three-pane.html.j2")
   [
     "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-    "<link rel='stylesheet' href='http://localhost:7331/assets/css/stellar'>"
+    "<link rel='stylesheet' href='/stellar.css'>"
     "<link rel='stylesheet' href='/base.css'>"
     "<script src='https://cdn.jsdelivr.net/npm/iconify-icon@2/dist/iconify-icon.min.js'></script>"
     "</head><body>"
@@ -363,7 +363,7 @@ def design-page []: nothing -> any {
       HEAD
       (META {charset: "utf-8"})
       (TITLE "stacks.nu | design")
-      (LINK {rel: "stylesheet" href: "http://localhost:7331/assets/css/stellar"})
+      (LINK {rel: "stylesheet" href: "/stellar.css"})
       (LINK {rel: "stylesheet" href: "/base.css"})
       (SCRIPT-ICONIFY)
     )
@@ -396,7 +396,7 @@ def shots-page []: nothing -> any {
       HEAD
       (META {charset: "utf-8"})
       (TITLE "stacks.nu | screenshots")
-      (LINK {rel: "stylesheet" href: "http://localhost:7331/assets/css/stellar"})
+      (LINK {rel: "stylesheet" href: "/stellar.css"})
       (LINK {rel: "stylesheet" href: "/base.css"})
     )
     (
@@ -446,19 +446,9 @@ def index-page []: nothing -> any {
       (META {charset: "utf-8"})
       (META {name: "viewport" content: "width=device-width,initial-scale=1"})
       (TITLE "stacks.nu")
-      (LINK {rel: "stylesheet" href: "http://localhost:7331/assets/css/stellar"})
+      (LINK {rel: "stylesheet" href: "/stellar.css"})
       (LINK {rel: "stylesheet" href: "/base.css"})
       (SCRIPT {type: "module" src: $DATASTAR_JS_PATH})
-      # Stellar dev-loop: subscribes to the local Stellar server's live-refresh
-      # SSE so token edits restyle the page without a reload. Harmless if the
-      # endpoint is offline (the @get just fails silently).
-      (
-        LINK {
-          id: "stellar-css"
-          rel: "stylesheet"
-          data-init: "@get('http://localhost:7331/live-refresh')"
-        }
-      )
       (SCRIPT-ICONIFY)
       (SCRIPT {src: "/keys.js"})
       (SCRIPT {src: "/action-panel.js"})
