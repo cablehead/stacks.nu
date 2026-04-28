@@ -330,7 +330,7 @@ def design-page []: nothing -> any {
       (SCRIPT-ICONIFY)
     )
     (
-      BODY {style: "padding: 1.5rem; background: var(--primary-6); color: var(--primary-6-on); font-family: var(--font-sans); margin: 0;"}
+      BODY {style: "padding: 1.5rem; background: var(--primary-6); color: var(--primary-6-on); font-family: var(--font-sans); margin: 0; height: 100vh; overflow: auto;"}
       (H1 {style: "font-size: var(--font-size-2); margin: 0 0 .25rem;"} "stacks.nu | design")
       (P {style: "color: var(--primary-7-dim); font-size: var(--font-size--1); margin: 0 0 1.5rem;"}
         "Inert layout previews of every mode. Each tile is an iframe rendering the live template at a fixed state.")
