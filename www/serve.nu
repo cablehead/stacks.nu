@@ -456,6 +456,7 @@ def index-page []: nothing -> any {
       )
       (SCRIPT-ICONIFY)
       (SCRIPT {src: "/keys.js"})
+      (SCRIPT {src: "/action-panel.js"})
       # Theme toggle handler. Lives at window.toggleTheme so the status-bar
       # button can call it inline; persists choice and updates the icon.
       (

@@ -149,7 +149,9 @@
   </article>
 
   {% if mode == "actions" %}
-  <div role="dialog" aria-modal="true" aria-label="Actions" style="
+  <div role="dialog" aria-modal="true" aria-label="Actions"
+    data-init="window.actionPanel && window.actionPanel.mount(el)"
+    style="
     position: absolute;
     inset: 0;
     z-index: 1000;
