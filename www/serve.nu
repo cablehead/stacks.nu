@@ -47,24 +47,43 @@ def glyphs [keys: list<string>]: nothing -> list<string> {
 
 # JS snippets the client evaluates. URL string interpolation happens here so
 # the registry value is exactly the JS the browser runs -- no client-side
-# template language. POST with no body, or with an arbitrary body expression.
-def js-post [url: string]: nothing -> string {
-  "fetch(" + ($url | to json -r) + ", {method:'POST'})"
+# template language.
+#
+# js-fetch covers POST / DELETE / PATCH callsites:
+#   --method:  HTTP method (default POST)
+#   --body:    raw JS expression evaluated as the request body
+#   --json:    value JSON-serialized as the body; also sets content-type
+#   --confirm: prompt; gates the fetch in `if (confirm("..."))`
+#   --then:    raw JS chained via `.finally(() => <expr>)`
+def js-fetch [
+  url: string
+  --method: string = "POST"
+  --body: string
+  --json: any
+  --confirm: string
+  --then: string
+]: nothing -> string {
+  let url_lit = $url | to json -r
+  let body_part = if $json != null {
+    let payload = $json | to json -r
+    $", headers:{'content-type':'application/json'}, body: ($payload | to json -r)"
+  } else if $body != null {
+    $", body: ($body)"
+  } else { "" }
+  let call = $"fetch\(($url_lit), {method:'($method)'($body_part)}\)"
+  let chained = if $then != null {
+    $"($call).finally\(\(\) => ($then)\)"
+  } else { $call }
+  if $confirm != null {
+    $"if \(confirm\(($confirm | to json -r)\)\) ($chained)"
+  } else { $chained }
 }
-def js-post-body [url: string, body_expr: string]: nothing -> string {
-  "fetch(" + ($url | to json -r) + ", {method:'POST', body: " + $body_expr + "})"
-}
-def js-delete [url: string]: nothing -> string {
-  "fetch(" + ($url | to json -r) + ", {method:'DELETE'})"
-}
-def js-confirm-delete [url: string, prompt: string]: nothing -> string {
-  "if (confirm(" + ($prompt | to json -r) + ")) fetch(" + ($url | to json -r) + ", {method:'DELETE'})"
-}
+
 # Impulse: fire-and-forget signal to the projection. The server validates
 # topic against IMPULSE_TOPICS; meta is the frame's meta. For ephemeral nav
 # events only -- not persistent mutations (those keep dedicated REST routes).
 def js-impulse [topic: string, meta: record]: nothing -> string {
-  "window.actions.impulse(" + ($topic | to json -r) + ", " + ($meta | to json -r) + ")"
+  $"window.actions.impulse\(($topic | to json -r), ($meta | to json -r)\)"
 }
 
 # Allowlist of topics the /_impulse endpoint will accept. Anything else --
@@ -84,17 +103,6 @@ const IMPULSE_TOPICS = [
   "set-mime.close"
 ]
 
-# JS for "PATCH this clip's meta, then send a close-mode impulse." Used by
-# the set-mime sub-mode rows.
-def js-patch-then-close [clip_id: string, patch: record, close_topic: string]: nothing -> string {
-  let body = $patch | to json -r
-  ([
-    "fetch(" ($"/clips/($clip_id)" | to json -r)
-    ", {method:'PATCH', headers:{'content-type':'application/json'}, body: " ($body | to json -r) "})"
-    ".finally(() => window.actions.impulse(" ($close_topic | to json -r) ", {}))"
-  ] | str join)
-}
-
 # Action registry. Action id -> JS string. Triggers (keymap, status-bar
 # buttons) reference actions by id; both invoke window.actions.invoke(id),
 # which evaluates the JS. This decouples WHAT (action) from HOW IT'S TRIGGERED
@@ -102,21 +110,21 @@ def js-patch-then-close [clip_id: string, patch: record, close_topic: string]: n
 def actions-for [mode: string, ctx: record]: nothing -> record {
   match $mode {
     "compose" => {
-      "compose.save":   (js-post-body $"/compose/submit/($ctx.composeStackId)" "document.querySelector('#compose-text').value")
+      "compose.save":   (js-fetch $"/compose/submit/($ctx.composeStackId)" --body "document.querySelector('#compose-text').value")
       "compose.cancel": (js-impulse "compose.close" {})
     }
     "edit" => {
-      "edit.save":   (js-post-body $"/editor/submit/($ctx.editClipId)" "document.querySelector('#compose-text').value")
+      "edit.save":   (js-fetch $"/editor/submit/($ctx.editClipId)" --body "document.querySelector('#compose-text').value")
       "edit.cancel": (js-impulse "editor.close" {})
     }
     "rename" => {
-      "rename.save":   (js-post-body $"/stacks/($ctx.renameStackId)/rename/submit" "document.querySelector('#rename-text').value")
+      "rename.save":   (js-fetch $"/stacks/($ctx.renameStackId)/rename/submit" --body "document.querySelector('#rename-text').value")
       "rename.cancel": (js-impulse "rename.close" {})
     }
     "actions" => (actions-main $ctx | upsert "actions.cancel" (js-impulse "actions.close" {}))
     "set-mime" => {
-      "set-mime.plain":    (js-patch-then-close $ctx.setMimeClipId {mime_type: "text/plain"}    "set-mime.close")
-      "set-mime.markdown": (js-patch-then-close $ctx.setMimeClipId {mime_type: "text/markdown"} "set-mime.close")
+      "set-mime.plain":    (js-fetch $"/clips/($ctx.setMimeClipId)" --method PATCH --json {mime_type: "text/plain"}    --then (js-impulse "set-mime.close" {}))
+      "set-mime.markdown": (js-fetch $"/clips/($ctx.setMimeClipId)" --method PATCH --json {mime_type: "text/markdown"} --then (js-impulse "set-mime.close" {}))
       "set-mime.cancel":   (js-impulse "set-mime.close" {})
     }
     _ => (actions-main $ctx)
@@ -136,7 +144,7 @@ def actions-main [ctx: record]: nothing -> record {
     # Client computes the name at fire-time so the timestamp is in the
     # viewer's local tz, then never changes. ISO-ish 'sv-SE' formats as
     # YYYY-MM-DD HH:MM:SS; we trim to minutes.
-    "stack.new":  (js-post-body "/stacks/new" "new Date().toLocaleString('sv-SE').slice(0,16)")
+    "stack.new":  (js-fetch "/stacks/new" --body "new Date().toLocaleString('sv-SE').slice(0,16)")
     "actions.open": (js-impulse "actions.open" {})
   }
   let with_n = if $ctx.selectedStackId != null {
@@ -145,16 +153,16 @@ def actions-main [ctx: record]: nothing -> record {
   let with_e = if $ctx.selectedClipId != null {
     $with_n
     | upsert "clip.edit"     (js-impulse "editor.open" {clip_id: $ctx.selectedClipId})
-    | upsert "clip.delete"   (js-delete $"/clips/($ctx.selectedClipId)")
+    | upsert "clip.delete"   (js-fetch $"/clips/($ctx.selectedClipId)" --method DELETE)
     | upsert "clip.set-mime" (js-impulse "set-mime.open" {clip_id: $ctx.selectedClipId})
   } else { $with_n }
   if $ctx.selectedStack != null {
     let next_sort = if $ctx.selectedStack.sort == "auto" { "manual" } else { "auto" }
     let stack_label = $ctx.selectedStack.name? | default "this stack"
     $with_e
-    | upsert "stack.sort.toggle" (js-post $"/stacks/($ctx.selectedStack.id)/sort/($next_sort)")
+    | upsert "stack.sort.toggle" (js-fetch $"/stacks/($ctx.selectedStack.id)/sort/($next_sort)")
     | upsert "stack.rename" (js-impulse "rename.open" {stack_id: $ctx.selectedStack.id})
-    | upsert "stack.delete" (js-confirm-delete $"/stacks/($ctx.selectedStack.id)" $"Delete stack \"($stack_label)\"?")
+    | upsert "stack.delete" (js-fetch $"/stacks/($ctx.selectedStack.id)" --method DELETE --confirm $"Delete stack \"($stack_label)\"?")
   } else { $with_e }
 }
 
