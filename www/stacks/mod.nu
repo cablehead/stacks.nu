@@ -3,18 +3,17 @@
 # Each builder returns a "frame request" record:
 #   {topic: <string>, ttl: <"forever"|"ephemeral">, meta: <record>, body?: <any>}
 #
-# Pipe it into `append` to write to xs:
+# Pipe it into `send` to write to xs:
 #   stack add "Inbox" --sort auto | send
 #   "hello" | clip add $sid --mime-type text/plain | send
 #
-# Or read the record directly if you just need the protocol shape:
-#   stack update $id --name "Renamed" | get meta
-#   # => {id: <id>, name: "Renamed"}
-#
-# All builders are pure (no store access). `append` is the only side effect.
+# All builders are pure (no store access). `send` is the only side effect.
 
 # --- stacks ------------------------------------------------------------------
 
+@example "Build a stack.add frame request" {
+  stack add "Inbox" --sort manual
+} --result {topic: "stack.add" ttl: "forever" meta: {name: "Inbox" sort: "manual"}}
 export def "stack add" [
   name: string
   --sort: string = "auto"   # "auto" | "manual"
@@ -22,6 +21,9 @@ export def "stack add" [
   {topic: "stack.add" ttl: "forever" meta: {name: $name sort: $sort}}
 }
 
+@example "stack.update with only the fields you set" {
+  stack update "s1" --name "Renamed"
+} --result {topic: "stack.update" ttl: "forever" meta: {id: "s1" name: "Renamed"}}
 export def "stack update" [
   id: string
   --name: string
@@ -33,11 +35,20 @@ export def "stack update" [
   {topic: "stack.update" ttl: "forever" meta: $meta}
 }
 
+@example "stack.delete by id" {
+  stack delete "s1"
+} --result {topic: "stack.delete" ttl: "forever" meta: {id: "s1"}}
 export def "stack delete" [id: string]: nothing -> record {
   {topic: "stack.delete" ttl: "forever" meta: {id: $id}}
 }
 
 # Selection: id wins over --down/--up. At least one must be supplied.
+@example "Select a specific stack by id" {
+  stack select "s1"
+} --result {topic: "stack.select" ttl: "ephemeral" meta: {id: "s1"}}
+@example "Cycle to the next stack" {
+  stack select --down
+} --result {topic: "stack.select" ttl: "ephemeral" meta: {action: "down"}}
 export def "stack select" [
   id?: string
   --down
@@ -51,6 +62,12 @@ export def "stack select" [
 
 
 # Body bytes (piped in) become the clip's content; xs CAS-stores them.
+@example "Add a clip to a stack" {
+  "hello" | clip add "s2" --mime-type "text/plain" --position "am"
+} --result {topic: "clip.add" ttl: "forever" meta: {stack_id: "s2" mime_type: "text/plain" position: "am"} body: "hello"}
+@example "clip.add with defaults" {
+  clip add "s2"
+} --result {topic: "clip.add" ttl: "forever" meta: {stack_id: "s2" mime_type: "text/plain"} body: null}
 export def "clip add" [
   stack_id: string
   --mime-type: string = "text/plain"
@@ -64,6 +81,12 @@ export def "clip add" [
 
 # Move a clip across stacks and/or reposition. At least one of
 # --to-stack / --position is required.
+@example "Move a clip to another stack at a position" {
+  clip move "c1" --to-stack "s2" --position "z"
+} --result {topic: "clip.patch" ttl: "forever" meta: {id: "c1" stack_id: "s2" position: "z"}}
+@example "Reposition a clip without changing stack" {
+  clip move "c1" --position "n"
+} --result {topic: "clip.patch" ttl: "forever" meta: {id: "c1" position: "n"}}
 export def "clip move" [
   id: string
   --to-stack: string
@@ -78,10 +101,16 @@ export def "clip move" [
   {topic: "clip.patch" ttl: "forever" meta: $meta}
 }
 
+@example "clip.delete by id" {
+  clip delete "c1"
+} --result {topic: "clip.delete" ttl: "forever" meta: {id: "c1"}}
 export def "clip delete" [id: string]: nothing -> record {
   {topic: "clip.delete" ttl: "forever" meta: {id: $id}}
 }
 
+@example "Cycle to the previous clip" {
+  clip select --up
+} --result {topic: "clip.select" ttl: "ephemeral" meta: {action: "up"}}
 export def "clip select" [
   id?: string
   --down
