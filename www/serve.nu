@@ -472,29 +472,64 @@ window.toggleTheme = function() {
   )
 }
 
-# First-run seed: when the store has never had a stack, drop in a "Welcome"
-# stack with a couple of intro clips so the empty UI isn't a wall of nav
-# keys that go nowhere. Idempotent -- skipped on every subsequent boot.
+# First-run seed: when the store has never had a stack, drop in a "Tutorial"
+# stack whose clips form a guided walkthrough. Each step's instruction is the
+# natural action to advance: pressing "j" moves you down to the next clip;
+# DEL preserves cursor slot so it lands on the next step; the final "edit"
+# step demonstrates auto sort by floating the edited clip back to the top.
+# Idempotent -- skipped on every subsequent boot.
 def bootstrap-if-empty []: nothing -> nothing {
   if (.cat | where topic == "stack.add" | length) > 0 { return }
-  let stack = .append stack.add --meta {name: "Welcome" sort: "auto"}
-  # Auto sort renders newest first, so append in reverse display order.
-  "Delete a clip with DEL. Delete this whole stack with Shift+DEL.
-Rename it with R. Toggle sort (auto / manual) from the actions panel."
+  let stack = .append stack.add --meta {name: "Tutorial" sort: "auto"}
+  # Auto sort renders newest-first, so append in reverse display order:
+  # step 4 (bottom) first, step 0 (top) last.
+
+  # Step 4 -- bottom; press "e" to edit, demonstrates auto sort + graduates.
+  "Press \"e\" to edit this clip. \"Cmd+Enter\" saves; Esc cancels.
+
+When you save, you'll bounce to the top of the stack -- that's auto sort: edits float clips up by recency.
+
+There's more in the actions panel:
+  \"n\"          new clip in this stack
+  \"Shift+n\"    new stack
+  \"r\"          rename this stack
+  \"Shift+DEL\"  delete this whole stack
+  \"0\"          jump to top of stack
+  \"Shift+0\"    jump to the first stack
+
+The icon on the far right of the status bar toggles light / dark.
+
+When you're ready to start for real, \"Shift+DEL\" removes this whole stack."
     | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
 
-  "Keys:
-  J / K            next / prev clip
-  Shift+J / K      next / prev stack
-  N                new clip in this stack
-  Shift+N          new stack
-  E                edit selected clip
-  R                rename selected stack
-  Cmd+K            open the actions panel
-  Esc              close any dialog"
+  # Step 3 -- press "Cmd+k" to try the actions panel, then "j" to continue.
+  "Press \"Cmd+k\" to open the actions panel.
+
+Type to filter, arrow keys to navigate, Enter (or click) to fire, Esc to close.
+
+When you're done, press \"j\" to continue."
     | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
 
-  "Welcome to stacks.nu! Press Cmd+K to see everything you can do."
+  # Step 2 -- press DEL; cursor preservation lands you on what was step 3.
+  "Press DEL to delete this clip.
+
+Your cursor stays in the same slot, so you'll land on the next clip down."
+    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+
+  # Step 1 -- nav refresher.
+  "\"j\" goes to the next clip; \"k\" goes to the previous one.
+
+\"Shift+j\" / \"Shift+k\" cycle stacks (the list on the left).
+
+Press \"j\" again."
+    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+
+  # Step 0 -- top; the user's first view.
+  "Welcome to stacks.nu.
+
+The status bar at the bottom shows your keys.
+
+Press \"j\" to move to the next clip."
     | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
 }
 
