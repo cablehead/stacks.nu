@@ -14,7 +14,7 @@ const FRAMES = [
   {topic: "clip.add"     id: "c2" hash: "sha256-bbb" meta: {stack_id: "s1" mime_type: "text/plain"}}
   {topic: "clip.add"     id: "c3" hash: "sha256-ccc" meta: {stack_id: "s2" mime_type: "image/png" position: "a"}}
   {topic: "stack.update" id: "u1" hash: null meta: {id: "s1" name: "Recent"}}
-  {topic: "clip.move"    id: "u2" hash: null meta: {id: "c1" stack_id: "s2" position: "am"}}
+  {topic: "clip.patch"   id: "u2" hash: null meta: {id: "c1" stack_id: "s2" position: "am"}}
   {topic: "clip.delete"  id: "u3" hash: null meta: {id: "c2"}}
 ]
 
@@ -409,10 +409,10 @@ let d2 = clip add "s2"  # defaults: mime_type=text/plain, no position, body=null
 assert ($d2.meta == {stack_id: "s2" mime_type: "text/plain"})
 
 let e = clip move "c1" --to-stack "s2" --position "z"
-assert ($e == {topic: "clip.move" ttl: "forever" meta: {id: "c1" stack_id: "s2" position: "z"}})
+assert ($e == {topic: "clip.patch" ttl: "forever" meta: {id: "c1" stack_id: "s2" position: "z"}})
 
 let e2 = clip move "c1" --position "n"
-assert ($e2.meta == {id: "c1" position: "n"}) "clip move can reposition without changing stack"
+assert ($e2 == {topic: "clip.patch" ttl: "forever" meta: {id: "c1" position: "n"}}) "clip move can reposition without changing stack"
 
 let f = clip delete "c1"
 assert ($f == {topic: "clip.delete" ttl: "forever" meta: {id: "c1"}})

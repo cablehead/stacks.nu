@@ -75,7 +75,7 @@ export def "clip move" [
   mut meta = {id: $id}
   if $to_stack != null { $meta = $meta | upsert stack_id $to_stack }
   if $position != null { $meta = $meta | upsert position $position }
-  {topic: "clip.move" ttl: "forever" meta: $meta}
+  {topic: "clip.patch" ttl: "forever" meta: $meta}
 }
 
 export def "clip delete" [id: string]: nothing -> record {

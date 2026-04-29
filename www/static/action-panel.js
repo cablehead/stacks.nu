@@ -33,17 +33,19 @@
     });
     setSelected(panel, 0);
   }
-  // Cancel first, then invoke -- so the actions.close frame is appended
-  // before any frame the action itself emits (e.g. compose.open from
-  // clip.new). Server-side projection sees them in that order.
-  function fire(id) {
-    window.actions.impulse("actions.close", {}).finally(() => {
+  // Cancel first, then invoke -- so the close frame is appended before
+  // any frame the action itself emits (e.g. compose.open from clip.new).
+  // Server-side projection sees them in that order.
+  function fire(panel, id) {
+    const closeTopic = panel.dataset.closeTopic || "actions.close";
+    window.actions.impulse(closeTopic, {}).finally(() => {
       window.actions.invoke(id);
     });
   }
 
   window.actionPanel = {
     mount: function (panel) {
+      const closeTopic = panel.dataset.closeTopic || "actions.close";
       const input = $(panel, "#actions-filter");
       if (input) {
         input.addEventListener("input", () => applyFilter(panel, input.value));
@@ -58,7 +60,7 @@
             e.preventDefault(); e.stopPropagation();
             const rows = visibleRows(panel);
             const idx = selectedIndex(panel);
-            if (idx >= 0) fire(rows[idx].dataset.action);
+            if (idx >= 0) fire(panel, rows[idx].dataset.action);
           }
         });
       }
@@ -66,7 +68,7 @@
         const row = e.target.closest(".action-row");
         if (!row || !row.dataset.action) return;
         e.preventDefault();
-        fire(row.dataset.action);
+        fire(panel, row.dataset.action);
       });
       // Close on click outside the panel's inner box. Document-level so
       // clicks on the status bar and other UI also dismiss. Self-cleans
@@ -79,7 +81,7 @@
         }
         if (inner.contains(e.target)) return;
         document.removeEventListener("mousedown", docHandler);
-        window.actions.impulse("actions.close", {});
+        window.actions.impulse(closeTopic, {});
       };
       document.addEventListener("mousedown", docHandler);
     },

@@ -6,7 +6,7 @@
 #   stack.delete meta: {id}
 #   clip.add     meta: {stack_id, mime_type, position?}      frame.id = clip id
 #   clip.update  meta: {id}                                   body -> new hash; clip id stays stable
-#   clip.move    meta: {id, stack_id?, position?}
+#   clip.patch   meta: {id, stack_id?, position?, mime_type?, ...}  # field merge; stack_id moves
 #   clip.delete  meta: {id}
 #
 # Ephemeral selection topics (TTL=ephemeral; replay window is "live only"):
@@ -18,16 +18,19 @@
 #   editor.close  meta: {}                          # exit edit mode
 #   rename.open   meta: {stack_id}                  # enter rename mode
 #   rename.close  meta: {}                          # exit rename mode
+#   set-mime.open  meta: {clip_id}                  # enter set-mime mode
+#   set-mime.close meta: {}                         # exit set-mime mode
 #
 # State shape:
 #   {
 #     stacks: [{id, name, sort, lastTouched, clips: [{id, hash, mime_type, position, lastTouched, versions}]}]
 #     selectedStackId: string|null
 #     selectedClipId:  string|null
-#     mode:            "main" | "compose" | "edit" | "rename" | "actions"
+#     mode:            "main" | "compose" | "edit" | "rename" | "actions" | "set-mime"
 #     composeStackId:  string|null
 #     editClipId:      string|null
 #     renameStackId:   string|null
+#     setMimeClipId:   string|null
 #     clipCursors:     {stack_id: clip_id, ...}  # last selected clip per stack
 #     frameId:         string|null   # id of the last frame that produced this state
 #   }
@@ -37,7 +40,7 @@
 # float to the top), manual = position asc.
 
 export def empty []: nothing -> record {
-  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null clipCursors: {} selectionExplicit: false frameId: null}
+  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null setMimeClipId: null clipCursors: {} selectionExplicit: false frameId: null}
 }
 
 export def sorted-clips [stack: record]: nothing -> list {
@@ -64,7 +67,7 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
     "stack.delete" => (stack-delete $state $frame)
     "clip.add" => (clip-add $state $frame)
     "clip.update" => (clip-update $state $frame)
-    "clip.move" => (clip-move $state $frame)
+    "clip.patch" => (clip-patch $state $frame)
     "clip.delete" => (clip-delete $state $frame)
     "stack.select" => (stack-select $state $frame)
     "clip.select" => (clip-select $state $frame)
@@ -76,6 +79,8 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
     "rename.close" => ($state | update mode "main" | update renameStackId null)
     "actions.open" => ($state | update mode "actions")
     "actions.close" => ($state | update mode "main")
+    "set-mime.open" => ($state | update mode "set-mime" | update setMimeClipId ($frame.meta?.clip_id?))
+    "set-mime.close" => ($state | update mode "main" | update setMimeClipId null)
     _ => $state
   }
   remember-cursor $s | update frameId ($frame.id? | default $s.frameId)
@@ -228,30 +233,37 @@ def clip-update [state: record, frame: record] {
   $state | update stacks $stacks
 }
 
-def clip-move [state: record, frame: record] {
+# clip.patch: field-level merge into a clip's meta. stack_id in the patch
+# moves the clip to a different stack (structural). Other fields are merged
+# directly. lastTouched only bumps for structural changes (move or position
+# update), not for pure metadata patches like mime_type -- those are a
+# re-classification, not activity.
+def clip-patch [state: record, frame: record] {
   let clip_id = $frame.meta.id
-  let new_stack_id = $frame.meta?.stack_id?
-  let new_position = $frame.meta?.position?
+  let patch = $frame.meta | reject id
 
   let owners = $state.stacks | where ($it.clips | any {|c| $c.id == $clip_id })
   if ($owners | is-empty) { return $state }
   let current = $owners | first
   let clip = $current.clips | where id == $clip_id | first
-  let target_id = $new_stack_id | default $current.id
-  let moved = if $new_position != null {
-    $clip | update position $new_position
-  } else {
-    $clip
-  }
+
+  let target_id = $patch.stack_id? | default $current.id
+  # Apply non-structural field updates (everything except stack_id).
+  let field_patch = if "stack_id" in ($patch | columns) {
+    $patch | reject stack_id
+  } else { $patch }
+  let patched = $clip | merge $field_patch
+  let bump = ($target_id != $current.id) or (($patch.position?) != null)
 
   let stacks = $state.stacks | each {|s|
     let stripped = $s | update clips ($s.clips | where id != $clip_id)
     let was_source = ($s.id == $current.id)
     let is_target = ($s.id == $target_id)
     if $is_target {
-      $stripped | update clips ($stripped.clips | append $moved) | update lastTouched $frame.id
+      let next = $stripped | update clips ($stripped.clips | append $patched)
+      if $bump { $next | update lastTouched $frame.id } else { $next }
     } else if $was_source {
-      $stripped | update lastTouched $frame.id
+      if $bump { $stripped | update lastTouched $frame.id } else { $stripped }
     } else {
       $stripped
     }

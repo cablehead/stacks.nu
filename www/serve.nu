@@ -5,7 +5,7 @@
 #
 # Persistent topics (see projection.nu for the protocol):
 #   stack.add | stack.update | stack.delete
-#   clip.add  | clip.move    | clip.delete
+#   clip.add  | clip.patch   | clip.delete
 # Ephemeral topics:
 #   stack.select | clip.select
 
@@ -23,7 +23,10 @@ def hydrate-clip [clip: record]: nothing -> record {
     try { .cas $clip.hash } catch { "" }
   }
   let preview = $body | str replace -ar "\\s+" " " | str trim | str substring 0..120
-  $clip | insert preview $preview | insert body $body
+  let body_html = if $clip.mime_type? == "text/markdown" {
+    try { $body | .md | get __html } catch { "" }
+  } else { "" }
+  $clip | insert preview $preview | insert body $body | insert bodyHtml $body_html
 }
 
 # Apple-symbol display for special keys; letters stay as-is. Used by the
@@ -77,7 +80,20 @@ const IMPULSE_TOPICS = [
   "rename.close"
   "actions.open"
   "actions.close"
+  "set-mime.open"
+  "set-mime.close"
 ]
+
+# JS for "PATCH this clip's meta, then send a close-mode impulse." Used by
+# the set-mime sub-mode rows.
+def js-patch-then-close [clip_id: string, patch: record, close_topic: string]: nothing -> string {
+  let body = $patch | to json -r
+  ([
+    "fetch(" ($"/clips/($clip_id)" | to json -r)
+    ", {method:'PATCH', headers:{'content-type':'application/json'}, body: " ($body | to json -r) "})"
+    ".finally(() => window.actions.impulse(" ($close_topic | to json -r) ", {}))"
+  ] | str join)
+}
 
 # Action registry. Action id -> JS string. Triggers (keymap, status-bar
 # buttons) reference actions by id; both invoke window.actions.invoke(id),
@@ -98,6 +114,11 @@ def actions-for [mode: string, ctx: record]: nothing -> record {
       "rename.cancel": (js-impulse "rename.close" {})
     }
     "actions" => (actions-main $ctx | upsert "actions.cancel" (js-impulse "actions.close" {}))
+    "set-mime" => {
+      "set-mime.plain":    (js-patch-then-close $ctx.setMimeClipId {mime_type: "text/plain"}    "set-mime.close")
+      "set-mime.markdown": (js-patch-then-close $ctx.setMimeClipId {mime_type: "text/markdown"} "set-mime.close")
+      "set-mime.cancel":   (js-impulse "set-mime.close" {})
+    }
     _ => (actions-main $ctx)
   }
 }
@@ -123,8 +144,9 @@ def actions-main [ctx: record]: nothing -> record {
   } else { $core }
   let with_e = if $ctx.selectedClipId != null {
     $with_n
-    | upsert "clip.edit"   (js-impulse "editor.open" {clip_id: $ctx.selectedClipId})
-    | upsert "clip.delete" (js-delete $"/clips/($ctx.selectedClipId)")
+    | upsert "clip.edit"     (js-impulse "editor.open" {clip_id: $ctx.selectedClipId})
+    | upsert "clip.delete"   (js-delete $"/clips/($ctx.selectedClipId)")
+    | upsert "clip.set-mime" (js-impulse "set-mime.open" {clip_id: $ctx.selectedClipId})
   } else { $with_n }
   if $ctx.selectedStack != null {
     let next_sort = if $ctx.selectedStack.sort == "auto" { "manual" } else { "auto" }
@@ -144,6 +166,7 @@ def keymap-for [mode: string, ctx: record]: nothing -> record {
     "edit" => {"cmd+enter": "edit.save", "escape": "edit.cancel"}
     "rename" => {"enter": "rename.save", "cmd+enter": "rename.save", "escape": "rename.cancel"}
     "actions" => {"escape": "actions.cancel", "cmd+k": "actions.cancel"}
+    "set-mime" => {"escape": "set-mime.cancel", "p": "set-mime.plain", "m": "set-mime.markdown"}
     _ => (keymap-main $ctx)
   }
 }
@@ -191,6 +214,9 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
     "actions" => [
       {action: "actions.cancel" label: "close" keys: (glyphs [Esc])}
     ]
+    "set-mime" => [
+      {action: "set-mime.cancel" label: "cancel" keys: (glyphs [Esc])}
+    ]
     _ => [
       {action: "clip.next"    label: "next clip"  keys: (glyphs [J])}
       {action: "clip.prev"    label: "prev clip"  keys: (glyphs [K])}
@@ -204,11 +230,18 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
 # Action panel (Cmd+K): flat list, ordered clip-then-stack. Each row's
 # `require` field gates visibility against the current selection (~/stacks's
 # canApply pattern). Returns the rows that should appear given ctx.
-def panel-actions-for [ctx: record]: nothing -> list {
+def panel-actions-for [mode: string, ctx: record]: nothing -> list {
+  if $mode == "set-mime" {
+    return [
+      {action: "set-mime.plain"    label: "Plain text" keys: (glyphs [P]) target: "mime" require: "always" groupStart: false}
+      {action: "set-mime.markdown" label: "Markdown"   keys: (glyphs [M]) target: "mime" require: "always" groupStart: false}
+    ]
+  }
   let items = [
-    {action: "clip.new"          label: "New clip"     keys: (glyphs [N])         target: "clip"  require: "stack"}
-    {action: "clip.edit"         label: "Edit clip"    keys: (glyphs [E])         target: "clip"  require: "clip"}
-    {action: "clip.delete"       label: "Delete clip"  keys: (glyphs [Del])       target: "clip"  require: "clip"}
+    {action: "clip.new"          label: "New clip"          keys: (glyphs [N])         target: "clip"  require: "stack"}
+    {action: "clip.edit"         label: "Edit clip"         keys: (glyphs [E])         target: "clip"  require: "clip"}
+    {action: "clip.set-mime"     label: "Set content type"  keys: []                   target: "clip"  require: "clip"}
+    {action: "clip.delete"       label: "Delete clip"       keys: (glyphs [Del])       target: "clip"  require: "clip"}
     {action: "stack.new"         label: "New stack"    keys: (glyphs [Shift N])   target: "stack" require: "always"}
     {action: "stack.rename"      label: "Rename stack" keys: (glyphs [R])         target: "stack" require: "stack"}
     {action: "stack.sort.toggle" label: "Toggle sort"  keys: []                   target: "stack" require: "stack"}
@@ -252,6 +285,7 @@ def mode-name-for [mode: string, ctx: record]: nothing -> string {
     "edit" => $"Edit clip in ($ctx.editStackName)"
     "rename" => "Rename stack"
     "actions" => "Actions"
+    "set-mime" => "Set content type"
     _ => {
       if $ctx.selectedStack == null { "Stacks" } else { ($ctx.selectedStack.name? | default "Untitled") }
     }
@@ -287,6 +321,7 @@ def view-model [state: record]: nothing -> record {
     editClipId: $state.editClipId
     editStackName: $edit_name
     renameStackId: $state.renameStackId
+    setMimeClipId: $state.setMimeClipId
     selectedStackId: $state.selectedStackId
     selectedClipId: $state.selectedClipId
     selectedStack: $stack
@@ -295,7 +330,7 @@ def view-model [state: record]: nothing -> record {
   let keymap = keymap-for $state.mode $ctx
   let bindings = bindings-for $state.mode $ctx
   let stack_actions = stack-actions-for $state.mode $ctx
-  let panel_actions = panel-actions-for $ctx
+  let panel_actions = panel-actions-for $state.mode $ctx
   # Stacks ordered by recent activity (any event touching the stack or its clips).
   let stacks_sorted = $state.stacks | sort-by lastTouched | reverse
   {
@@ -355,6 +390,7 @@ def design-state [variant: string]: nothing -> record {
     "edit"             => ($base | update mode "edit"    | update editClipId "c1")
     "rename"           => ($base | update mode "rename"  | update renameStackId "s1")
     "actions"          => ($base | update mode "actions")
+    "set-mime"         => ($base | update mode "set-mime" | update setMimeClipId "c1")
     _ => $base
   }
 }
@@ -377,7 +413,7 @@ def design-tile-html [variant: string]: nothing -> string {
 }
 
 def design-page []: nothing -> any {
-  let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions"]
+  let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions" "set-mime"]
   (
     HTML
     (
@@ -684,8 +720,16 @@ bootstrap-if-empty
       $body | .append clip.add --meta $meta
     })
     (route {method: "PATCH" path-matches: "/clips/:id"} {|req ctx|
+      # Field-level patch: stack_id moves, position repositions, mime_type
+      # re-classifies. Validate mime_type against the small allowlist; pass
+      # the rest through.
       let body = $in | from json
-      .append clip.move --meta ($body | merge {id: $ctx.id})
+      let mime_ok = ["text/plain", "text/markdown"]
+      if "mime_type" in ($body | columns) and not ($body.mime_type in $mime_ok) {
+        return ("invalid mime_type" | metadata set { merge {'http.response': {status: 400}} })
+      }
+      .append clip.patch --meta ($body | merge {id: $ctx.id}) | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
     })
     (route {method: "DELETE" path-matches: "/clips/:id"} {|req ctx|
       .append clip.delete --meta {id: $ctx.id}

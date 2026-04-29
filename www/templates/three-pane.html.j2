@@ -115,6 +115,8 @@
     {% if selectedClip %}
       {% if selectedClip.mime_type == "image/png" or selectedClip.mime_type == "image/jpeg" %}
         <img src="/clips/{{ selectedClip.versions[0] }}/content" alt="" style="max-width: 100%; height: auto; border-radius: var(--border-radius-1);" />
+      {% elif selectedClip.mime_type == "text/markdown" %}
+        <div class="markdown" style="line-height: var(--font-line-height-1);">{{ selectedClip.bodyHtml | safe }}</div>
       {% else %}
         <pre style="
           margin: 0;
@@ -144,8 +146,9 @@
     {% endif %}
   </article>
 
-  {% if mode == "actions" %}
-  <div role="dialog" aria-modal="true" aria-label="Actions"
+  {% if mode == "actions" or mode == "set-mime" %}
+  <div role="dialog" aria-modal="true" aria-label="{{ modeName }}"
+    data-close-topic="{% if mode == 'set-mime' %}set-mime.close{% else %}actions.close{% endif %}"
     data-init="window.actionPanel && window.actionPanel.mount(el)"
     style="
     position: absolute;
@@ -167,6 +170,7 @@
       box-shadow: 0 -1rem 2.5rem rgba(0,0,0,0.4);
       overflow: hidden;
     ">
+      {% if mode == "actions" %}
       <div style="
         padding: .6rem .85rem;
         border-bottom: 1px solid var(--primary-7-dim);
@@ -184,6 +188,7 @@
           "
         />
       </div>
+      {% endif %}
       <div class="action-rows" style="
         flex: 1;
         overflow: auto;
