@@ -472,19 +472,39 @@ window.toggleTheme = function() {
   )
 }
 
-# First-run seed: when the store has never had a stack, drop in a "Tutorial"
-# stack whose clips form a guided walkthrough. Each step's instruction is the
-# natural action to advance: pressing "j" moves you down to the next clip;
-# DEL preserves cursor slot so it lands on the next step; the final "edit"
-# step demonstrates auto sort by floating the edited clip back to the top.
+# First-run seed: when the store has never had a stack, drop in two stacks
+# whose clips form a guided walkthrough.
+#
+# Tutorial (top): the spine. Each step's instruction is the natural action to
+# advance -- pressing "j" moves you down; DEL preserves cursor slot so it
+# lands on the next step; the final "e" demonstrates auto sort by floating
+# the edited clip to the top.
+#
+# Side Quest (below Tutorial): a single-clip detour. The Tutorial sends you
+# here via Shift+j; you Shift+DEL the whole stack to bounce back, restoring
+# your per-stack cursor on the Tutorial side.
+#
+# Append order matters: stacks render lastTouched-desc, so Tutorial is
+# populated AFTER Side Quest to land on top. Within each stack, clips also
+# render newest-first, so we append in reverse display order.
+#
 # Idempotent -- skipped on every subsequent boot.
 def bootstrap-if-empty []: nothing -> nothing {
   if (.cat | where topic == "stack.add" | length) > 0 { return }
-  let stack = .append stack.add --meta {name: "Tutorial" sort: "auto"}
-  # Auto sort renders newest-first, so append in reverse display order:
-  # step 4 (bottom) first, step 0 (top) last.
 
-  # Step 4 -- bottom; press "e" to edit, demonstrates auto sort + graduates.
+  # ---- Side Quest (added first so Tutorial ends up on top) ----
+  let side = .append stack.add --meta {name: "Side Quest" sort: "auto"}
+  "Welcome to the side quest stack. The Tutorial stack is still in the list on the left.
+
+Press \"Shift+DEL\" to delete this whole stack. Click OK to confirm.
+
+Your cursor will preserve and bounce you back to where you left off in Tutorial."
+    | .append clip.add --meta {stack_id: $side.id mime_type: "text/plain"} | ignore
+
+  # ---- Tutorial ----
+  let tut = .append stack.add --meta {name: "Tutorial" sort: "auto"}
+
+  # Step 5 -- bottom; press "e" to edit, demonstrates auto sort + graduates.
   "Press \"e\" to edit this clip. \"Cmd+Enter\" saves; Esc cancels.
 
 When you save, you'll bounce to the top of the stack -- that's auto sort: edits float clips up by recency.
@@ -500,21 +520,27 @@ There's more in the actions panel:
 The icon on the far right of the status bar toggles light / dark.
 
 When you're ready to start for real, \"Shift+DEL\" removes this whole stack."
-    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 
-  # Step 3 -- press "Cmd+k" to try the actions panel, then "j" to continue.
-  "Press \"Cmd+k\" to open the actions panel.
+  # Step 4 -- continuation after returning from the side quest.
+  "Welcome back. Your cursor preserved its position -- and the side quest stack is gone.
 
-Type to filter, arrow keys to navigate, Enter (or click) to fire, Esc to close.
+Press \"Cmd+k\" to open the actions panel. Type to filter, arrows to navigate, Enter (or click) to fire, Esc to close.
 
 When you're done, press \"j\" to continue."
-    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
+
+  # Step 3 -- side quest hand-off. Re-read after return tells you to press "j".
+  "Side quest: press \"Shift+j\" to switch to the next stack.
+
+When you come back, press \"j\" to continue."
+    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 
   # Step 2 -- press DEL; cursor preservation lands you on what was step 3.
   "Press DEL to delete this clip.
 
 Your cursor stays in the same slot, so you'll land on the next clip down."
-    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 
   # Step 1 -- nav refresher.
   "\"j\" goes to the next clip; \"k\" goes to the previous one.
@@ -522,7 +548,7 @@ Your cursor stays in the same slot, so you'll land on the next clip down."
 \"Shift+j\" / \"Shift+k\" cycle stacks (the list on the left).
 
 Press \"j\" again."
-    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 
   # Step 0 -- top; the user's first view.
   "Welcome to stacks.nu.
@@ -530,7 +556,7 @@ Press \"j\" again."
 The status bar at the bottom shows your keys.
 
 Press \"j\" to move to the next clip."
-    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 }
 
 bootstrap-if-empty

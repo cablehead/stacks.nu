@@ -177,6 +177,48 @@ let order = projection sorted-clips ($two.stacks | first) | get id
 assert ($order == ["c1" "c2"]) $"edited c1 should bubble above c2 in auto-sort; got ($order)"
 print "   ok"
 
+print "5k. switching stacks restores the per-stack cursor"
+# Three stacks; explicitly pick a non-default clip in s2, leave it, come
+# back -- selection should restore to that clip.
+let memo_setup = [
+  {topic: "stack.add" id: "m1" hash: null meta: {name: "M1" sort: "manual"}}
+  {topic: "stack.add" id: "m2" hash: null meta: {name: "M2" sort: "manual"}}
+  {topic: "clip.add"  id: "p1" hash: "h" meta: {stack_id: "m2" mime_type: "text/plain" position: "a"}}
+  {topic: "clip.add"  id: "p2" hash: "h" meta: {stack_id: "m2" mime_type: "text/plain" position: "b"}}
+  {topic: "clip.add"  id: "p3" hash: "h" meta: {stack_id: "m2" mime_type: "text/plain" position: "c"}}
+]
+
+let memorized = $memo_setup | append [
+  {topic: "stack.select" id: "u" hash: null meta: {id: "m2"}}
+  {topic: "clip.select"  id: "u" hash: null meta: {id: "p2"}}   # explicit pick
+  {topic: "stack.select" id: "u" hash: null meta: {id: "m1"}}   # leave
+  {topic: "stack.select" id: "u" hash: null meta: {id: "m2"}}   # come back
+] | projection project
+assert ($memorized.selectedStackId == "m2")
+assert ($memorized.selectedClipId == "p2") $"expected p2 restored; got ($memorized.selectedClipId)"
+
+# Memorized clip removed -> falls back to first clip in render order.
+let stale = $memo_setup | append [
+  {topic: "stack.select" id: "u" hash: null meta: {id: "m2"}}
+  {topic: "clip.select"  id: "u" hash: null meta: {id: "p2"}}
+  {topic: "stack.select" id: "u" hash: null meta: {id: "m1"}}
+  {topic: "clip.delete"  id: "u" hash: null meta: {id: "p2"}}   # remove memorized
+  {topic: "stack.select" id: "u" hash: null meta: {id: "m2"}}
+] | projection project
+assert ($stale.selectedClipId == "p1") $"stale memory should fall back; got ($stale.selectedClipId)"
+print "   ok"
+
+print "5l. stack.delete bounce restores the destination stack's cursor"
+let bounced = $memo_setup | append [
+  {topic: "stack.select" id: "u" hash: null meta: {id: "m2"}}
+  {topic: "clip.select"  id: "u" hash: null meta: {id: "p2"}}   # remember p2 in m2
+  {topic: "stack.select" id: "u" hash: null meta: {id: "m1"}}   # switch to m1
+  {topic: "stack.delete" id: "u" hash: null meta: {id: "m1"}}   # delete m1, bounce to m2
+] | projection project
+assert ($bounced.selectedStackId == "m2")
+assert ($bounced.selectedClipId == "p2") $"bounce should restore p2; got ($bounced.selectedClipId)"
+print "   ok"
+
 print "5h. clip.delete preserves cursor position within the stack"
 # Manual sort, deterministic order: c1, c2, c3 (positions a, b, c).
 # Cursor on c2 -> deleting c2 should land cursor on c3 (slot stays).

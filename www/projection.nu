@@ -28,6 +28,7 @@
 #     composeStackId:  string|null
 #     editClipId:      string|null
 #     renameStackId:   string|null
+#     clipCursors:     {stack_id: clip_id, ...}  # last selected clip per stack
 #     frameId:         string|null   # id of the last frame that produced this state
 #   }
 #
@@ -36,7 +37,7 @@
 # float to the top), manual = position asc.
 
 export def empty []: nothing -> record {
-  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null selectionExplicit: false frameId: null}
+  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null clipCursors: {} selectionExplicit: false frameId: null}
 }
 
 export def sorted-clips [stack: record]: nothing -> list {
@@ -45,6 +46,15 @@ export def sorted-clips [stack: record]: nothing -> list {
   } else {
     $stack.clips | sort-by lastTouched | reverse
   }
+}
+
+# Stash the current (stack, clip) selection in clipCursors so a later
+# stack switch can restore the per-stack cursor. Idempotent and safe to
+# call after every state transition.
+def remember-cursor [state: record]: nothing -> record {
+  if $state.selectedStackId != null and $state.selectedClipId != null {
+    $state | update clipCursors ($state.clipCursors | upsert $state.selectedStackId $state.selectedClipId)
+  } else { $state }
 }
 
 export def apply-frame [state: record, frame: record]: nothing -> record {
@@ -68,7 +78,7 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
     "actions.close" => ($state | update mode "main")
     _ => $state
   }
-  $s | update frameId ($frame.id? | default $s.frameId)
+  remember-cursor $s | update frameId ($frame.id? | default $s.frameId)
 }
 
 # Apply default selection (first stack, first clip) when nothing is selected
@@ -93,8 +103,11 @@ export def reconcile-selection []: record -> record {
   let stack = $state.stacks | where id == $sel_stack | first
   let clips = sorted-clips $stack
   let clip_ids = $clips | get id
+  let memorized = $state.clipCursors | get -i $sel_stack
   let sel_clip = if ($state.selectedClipId in $clip_ids) {
     $state.selectedClipId
+  } else if $memorized != null and ($memorized in $clip_ids) {
+    $memorized
   } else {
     $clip_ids | get -i 0
   }
@@ -141,7 +154,29 @@ def stack-delete [state: record, frame: record] {
       $post | get $idx
     }
   }
-  $state | update stacks $stacks | update selectedStackId $new_selected
+  # If we're landing on a different stack, restore its memorized cursor;
+  # otherwise leave selectedClipId alone (reconcile will sort it out).
+  let new_clip = if $new_selected == null or $new_selected == $state.selectedStackId {
+    $state.selectedClipId
+  } else {
+    let stack = $stacks | where id == $new_selected | get -i 0
+    let clip_ids = if $stack == null { [] } else { sorted-clips $stack | get id }
+    let memorized = $state.clipCursors | get -i $new_selected
+    if $memorized != null and ($memorized in $clip_ids) {
+      $memorized
+    } else {
+      $clip_ids | get -i 0
+    }
+  }
+  # Drop the deleted stack's cursor entry to keep clipCursors tidy.
+  let cursors = if ($id in ($state.clipCursors | columns)) {
+    $state.clipCursors | reject $id
+  } else { $state.clipCursors }
+  $state
+    | update stacks $stacks
+    | update selectedStackId $new_selected
+    | update selectedClipId $new_clip
+    | update clipCursors $cursors
 }
 
 def clip-add [state: record, frame: record] {
@@ -276,12 +311,19 @@ def stack-select [state: record, frame: record] {
   } else {
     cycle $stack_ids $state.selectedStackId ($frame.meta?.action? | default "")
   }
-  # Switching stacks resets clip selection to that stack's first clip.
+  # Restore the per-stack cursor when re-entering a stack we've visited
+  # before; otherwise default to its first clip in render order.
   let stack = $state.stacks | where id == $new_id | get -i 0
-  let first_clip = if $stack == null { null } else { sorted-clips $stack | get id | get -i 0 }
+  let clip_ids = if $stack == null { [] } else { sorted-clips $stack | get id }
+  let memorized = $state.clipCursors | get -i $new_id
+  let target_clip = if $memorized != null and ($memorized in $clip_ids) {
+    $memorized
+  } else {
+    $clip_ids | get -i 0
+  }
   $state
     | update selectedStackId $new_id
-    | update selectedClipId $first_clip
+    | update selectedClipId $target_clip
     | update selectionExplicit true
 }
 
