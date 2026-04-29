@@ -30,7 +30,7 @@
         <li>
           <button
             type="button"
-            onmousedown="fetch('/select/stack/{{ stack.id }}', {method:'POST'})"
+            onmousedown="window.actions.impulse('stack.select', {id: '{{ stack.id }}'})"
             style="
               display: block;
               width: 100%;
@@ -71,7 +71,7 @@
       <li>
         <button
           type="button"
-          onmousedown="fetch('/select/clip/{{ clip.id }}', {method:'POST'})"
+          onmousedown="window.actions.impulse('clip.select', {id: '{{ clip.id }}'})"
           style="
             display: block;
             width: 100%;

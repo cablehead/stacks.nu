@@ -37,7 +37,7 @@
   // before any frame the action itself emits (e.g. compose.open from
   // clip.new). Server-side projection sees them in that order.
   function fire(id) {
-    fetch("/actions/cancel", { method: "POST" }).finally(() => {
+    window.actions.impulse("actions.close", {}).finally(() => {
       window.actions.invoke(id);
     });
   }
@@ -79,7 +79,7 @@
         }
         if (inner.contains(e.target)) return;
         document.removeEventListener("mousedown", docHandler);
-        fetch("/actions/cancel", { method: "POST" });
+        window.actions.impulse("actions.close", {});
       };
       document.addEventListener("mousedown", docHandler);
     },

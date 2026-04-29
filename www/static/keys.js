@@ -43,6 +43,16 @@
       const id = readJson("keymap")[combo];
       if (id) window.actions.invoke(id);
     },
+    // Fire-and-forget signal to the projection. The server validates the
+    // topic against an allowlist; meta is forwarded as the frame's meta.
+    // For ephemeral nav events only -- never persistent mutations.
+    impulse: function (topic, meta) {
+      return fetch("/_impulse", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ topic: topic, meta: meta || {} }),
+      });
+    },
   };
 
   document.addEventListener("keydown", function (e) {

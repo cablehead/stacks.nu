@@ -57,6 +57,27 @@ def js-delete [url: string]: nothing -> string {
 def js-confirm-delete [url: string, prompt: string]: nothing -> string {
   "if (confirm(" + ($prompt | to json -r) + ")) fetch(" + ($url | to json -r) + ", {method:'DELETE'})"
 }
+# Impulse: fire-and-forget signal to the projection. The server validates
+# topic against IMPULSE_TOPICS; meta is the frame's meta. For ephemeral nav
+# events only -- not persistent mutations (those keep dedicated REST routes).
+def js-impulse [topic: string, meta: record]: nothing -> string {
+  "window.actions.impulse(" + ($topic | to json -r) + ", " + ($meta | to json -r) + ")"
+}
+
+# Allowlist of topics the /_impulse endpoint will accept. Anything else --
+# in particular any persistent topic -- is rejected.
+const IMPULSE_TOPICS = [
+  "stack.select"
+  "clip.select"
+  "compose.open"
+  "compose.close"
+  "editor.open"
+  "editor.close"
+  "rename.open"
+  "rename.close"
+  "actions.open"
+  "actions.close"
+]
 
 # Action registry. Action id -> JS string. Triggers (keymap, status-bar
 # buttons) reference actions by id; both invoke window.actions.invoke(id),
@@ -66,17 +87,17 @@ def actions-for [mode: string, ctx: record]: nothing -> record {
   match $mode {
     "compose" => {
       "compose.save":   (js-post-body $"/compose/submit/($ctx.composeStackId)" "document.querySelector('#compose-text').value")
-      "compose.cancel": (js-post "/compose/cancel")
+      "compose.cancel": (js-impulse "compose.close" {})
     }
     "edit" => {
       "edit.save":   (js-post-body $"/editor/submit/($ctx.editClipId)" "document.querySelector('#compose-text').value")
-      "edit.cancel": (js-post "/editor/cancel")
+      "edit.cancel": (js-impulse "editor.close" {})
     }
     "rename" => {
       "rename.save":   (js-post-body $"/stacks/($ctx.renameStackId)/rename/submit" "document.querySelector('#rename-text').value")
-      "rename.cancel": (js-post "/rename/cancel")
+      "rename.cancel": (js-impulse "rename.close" {})
     }
-    "actions" => (actions-main $ctx | upsert "actions.cancel" (js-post "/actions/cancel"))
+    "actions" => (actions-main $ctx | upsert "actions.cancel" (js-impulse "actions.close" {}))
     _ => (actions-main $ctx)
   }
 }
@@ -85,24 +106,24 @@ def actions-for [mode: string, ctx: record]: nothing -> record {
 # overlaid on main; clicking a row should be able to invoke any main action).
 def actions-main [ctx: record]: nothing -> record {
   let core = {
-    "clip.next":  (js-post "/select/clip/down")
-    "clip.prev":  (js-post "/select/clip/up")
-    "clip.top":   (js-post "/select/clip/top")
-    "stack.next": (js-post "/select/stack/down")
-    "stack.prev": (js-post "/select/stack/up")
-    "stack.top":  (js-post "/select/stack/top")
+    "clip.next":  (js-impulse "clip.select"  {action: "down"})
+    "clip.prev":  (js-impulse "clip.select"  {action: "up"})
+    "clip.top":   (js-impulse "clip.select"  {action: "top"})
+    "stack.next": (js-impulse "stack.select" {action: "down"})
+    "stack.prev": (js-impulse "stack.select" {action: "up"})
+    "stack.top":  (js-impulse "stack.select" {action: "top"})
     # Client computes the name at fire-time so the timestamp is in the
     # viewer's local tz, then never changes. ISO-ish 'sv-SE' formats as
     # YYYY-MM-DD HH:MM:SS; we trim to minutes.
     "stack.new":  (js-post-body "/stacks/new" "new Date().toLocaleString('sv-SE').slice(0,16)")
-    "actions.open": (js-post "/actions/open")
+    "actions.open": (js-impulse "actions.open" {})
   }
   let with_n = if $ctx.selectedStackId != null {
-    $core | upsert "clip.new" (js-post $"/compose/open/($ctx.selectedStackId)")
+    $core | upsert "clip.new" (js-impulse "compose.open" {stack_id: $ctx.selectedStackId})
   } else { $core }
   let with_e = if $ctx.selectedClipId != null {
     $with_n
-    | upsert "clip.edit"   (js-post $"/editor/open/($ctx.selectedClipId)")
+    | upsert "clip.edit"   (js-impulse "editor.open" {clip_id: $ctx.selectedClipId})
     | upsert "clip.delete" (js-delete $"/clips/($ctx.selectedClipId)")
   } else { $with_n }
   if $ctx.selectedStack != null {
@@ -110,7 +131,7 @@ def actions-main [ctx: record]: nothing -> record {
     let stack_label = $ctx.selectedStack.name? | default "this stack"
     $with_e
     | upsert "stack.sort.toggle" (js-post $"/stacks/($ctx.selectedStack.id)/sort/($next_sort)")
-    | upsert "stack.rename" (js-post $"/stacks/($ctx.selectedStack.id)/rename/open")
+    | upsert "stack.rename" (js-impulse "rename.open" {stack_id: $ctx.selectedStack.id})
     | upsert "stack.delete" (js-confirm-delete $"/stacks/($ctx.selectedStack.id)" $"Delete stack \"($stack_label)\"?")
   } else { $with_e }
 }
@@ -574,49 +595,23 @@ bootstrap-if-empty
       | to sse
     })
 
-    # ---- selection (ephemeral) ----
-    (route {method: "POST" path: "/select/stack/down"} {|req ctx|
-      .append stack.select --meta {action: "down"} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path: "/select/stack/up"} {|req ctx|
-      .append stack.select --meta {action: "up"} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path: "/select/stack/top"} {|req ctx|
-      .append stack.select --meta {action: "top"} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path-matches: "/select/stack/:id"} {|req ctx|
-      .append stack.select --meta {id: $ctx.id} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path: "/select/clip/down"} {|req ctx|
-      .append clip.select --meta {action: "down"} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path: "/select/clip/up"} {|req ctx|
-      .append clip.select --meta {action: "up"} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path: "/select/clip/top"} {|req ctx|
-      .append clip.select --meta {action: "top"} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path-matches: "/select/clip/:id"} {|req ctx|
-      .append clip.select --meta {id: $ctx.id} --ttl ephemeral | ignore
+    # ---- ephemeral signal channel ----
+    # Pure-injection endpoint for transient state nudges (selection cycling,
+    # modal opens/closes). Topic must be in IMPULSE_TOPICS; meta is forwarded
+    # verbatim. Persistent mutations (clip.add, clip.update, *.delete, ...)
+    # keep their own REST routes -- different trust level, different audit.
+    (route {method: "POST" path: "/_impulse"} {|req ctx|
+      let body = $in | from json
+      let topic = $body.topic? | default ""
+      if not ($topic in $IMPULSE_TOPICS) {
+        return ("topic not allowed" | metadata set { merge {'http.response': {status: 400}} })
+      }
+      let meta = $body.meta? | default {}
+      .append $topic --meta $meta --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
-    # ---- compose (ephemeral modal mode) ----
-    (route {method: "POST" path-matches: "/compose/open/:id"} {|req ctx|
-      .append compose.open --meta {stack_id: $ctx.id} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path: "/compose/cancel"} {|req ctx|
-      .append compose.close --meta {} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
+    # ---- compose submit (workflow: clip.add then close mode) ----
     (route {method: "POST" path-matches: "/compose/submit/:id"} {|req ctx|
       let text = $in
       if not ($text | str trim | is-empty) {
@@ -626,25 +621,7 @@ bootstrap-if-empty
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
-    # ---- actions panel (ephemeral modal mode; pure overlay, no submit) ----
-    (route {method: "POST" path: "/actions/open"} {|req ctx|
-      .append actions.open --meta {} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path: "/actions/cancel"} {|req ctx|
-      .append actions.close --meta {} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-
-    # ---- rename (ephemeral modal mode; submits as stack.update) ----
-    (route {method: "POST" path-matches: "/stacks/:id/rename/open"} {|req ctx|
-      .append rename.open --meta {stack_id: $ctx.id} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path: "/rename/cancel"} {|req ctx|
-      .append rename.close --meta {} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
+    # ---- rename submit (workflow: stack.update then close mode) ----
     (route {method: "POST" path-matches: "/stacks/:id/rename/submit"} {|req ctx|
       let name = $in | default "" | str trim
       if not ($name | is-empty) {
@@ -654,15 +631,7 @@ bootstrap-if-empty
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
-    # ---- editor (ephemeral modal mode; submits as add-new + delete-old) ----
-    (route {method: "POST" path-matches: "/editor/open/:id"} {|req ctx|
-      .append editor.open --meta {clip_id: $ctx.id} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
-    (route {method: "POST" path: "/editor/cancel"} {|req ctx|
-      .append editor.close --meta {} --ttl ephemeral | ignore
-      "" | metadata set { merge {'http.response': {status: 204}} }
-    })
+    # ---- editor submit (workflow: clip.update then close mode) ----
     (route {method: "POST" path-matches: "/editor/submit/:id"} {|req ctx|
       let text = $in
       if not ($text | str trim | is-empty) {
