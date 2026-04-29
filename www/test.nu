@@ -323,7 +323,9 @@ print "8. serve.nu: POST /stacks appends a stack.add frame"
 '{"name": "Inbox", "sort": "auto"}' | do $handler {
   method: "POST" path: "/stacks" headers: {} query: {}
 }
-let added = .cat | where topic == "stack.add" | first
+# `last` rather than `first` because bootstrap-if-empty seeds a Welcome
+# stack on the first source; the new Inbox is the most recent stack.add.
+let added = .cat | where topic == "stack.add" | last
 assert ($added.meta.name == "Inbox")
 let stack_id = $added.id
 
@@ -334,7 +336,7 @@ let stack_id = $added.id
   headers: {}
   query: {mime_type: "text/plain"}
 }
-let clip_frame = .cat | where topic == "clip.add" | first
+let clip_frame = .cat | where topic == "clip.add" | last
 assert ($clip_frame.meta.stack_id == $stack_id)
 assert ($clip_frame.hash != null) "clip body should be CAS-stored, hash populated"
 

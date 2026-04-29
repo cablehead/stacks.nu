@@ -472,6 +472,34 @@ window.toggleTheme = function() {
   )
 }
 
+# First-run seed: when the store has never had a stack, drop in a "Welcome"
+# stack with a couple of intro clips so the empty UI isn't a wall of nav
+# keys that go nowhere. Idempotent -- skipped on every subsequent boot.
+def bootstrap-if-empty []: nothing -> nothing {
+  if (.cat | where topic == "stack.add" | length) > 0 { return }
+  let stack = .append stack.add --meta {name: "Welcome" sort: "auto"}
+  # Auto sort renders newest first, so append in reverse display order.
+  "Delete a clip with DEL. Delete this whole stack with Shift+DEL.
+Rename it with R. Toggle sort (auto / manual) from the actions panel."
+    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+
+  "Keys:
+  J / K            next / prev clip
+  Shift+J / K      next / prev stack
+  N                new clip in this stack
+  Shift+N          new stack
+  E                edit selected clip
+  R                rename selected stack
+  Cmd+K            open the actions panel
+  Esc              close any dialog"
+    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+
+  "Welcome to stacks.nu! Press Cmd+K to see everything you can do."
+    | .append clip.add --meta {stack_id: $stack.id mime_type: "text/plain"} | ignore
+}
+
+bootstrap-if-empty
+
 {|req|
   dispatch $req [
     (route {method: "GET" path: "/"} {|req ctx| index-page })
