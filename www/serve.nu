@@ -166,7 +166,7 @@ def keymap-for [mode: string, ctx: record]: nothing -> record {
     "edit" => {"cmd+enter": "edit.save", "escape": "edit.cancel"}
     "rename" => {"enter": "rename.save", "cmd+enter": "rename.save", "escape": "rename.cancel"}
     "actions" => {"escape": "actions.cancel", "cmd+k": "actions.cancel"}
-    "set-mime" => {"escape": "set-mime.cancel", "p": "set-mime.plain", "m": "set-mime.markdown"}
+    "set-mime" => {"escape": "set-mime.cancel"}
     _ => (keymap-main $ctx)
   }
 }

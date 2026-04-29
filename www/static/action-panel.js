@@ -49,21 +49,24 @@
       const input = $(panel, "#actions-filter");
       if (input) {
         input.addEventListener("input", () => applyFilter(panel, input.value));
-        input.addEventListener("keydown", (e) => {
-          if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
-            e.preventDefault(); e.stopPropagation();
-            setSelected(panel, selectedIndex(panel) + 1);
-          } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
-            e.preventDefault(); e.stopPropagation();
-            setSelected(panel, selectedIndex(panel) - 1);
-          } else if (e.key === "Enter") {
-            e.preventDefault(); e.stopPropagation();
-            const rows = visibleRows(panel);
-            const idx = selectedIndex(panel);
-            if (idx >= 0) fire(panel, rows[idx].dataset.action);
-          }
-        });
       }
+      // Keyboard navigation lives on the panel, not the input -- works
+      // regardless of where focus is, and works in dialogs that don't have
+      // a search input at all.
+      panel.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
+          e.preventDefault(); e.stopPropagation();
+          setSelected(panel, selectedIndex(panel) + 1);
+        } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
+          e.preventDefault(); e.stopPropagation();
+          setSelected(panel, selectedIndex(panel) - 1);
+        } else if (e.key === "Enter") {
+          e.preventDefault(); e.stopPropagation();
+          const rows = visibleRows(panel);
+          const idx = selectedIndex(panel);
+          if (idx >= 0) fire(panel, rows[idx].dataset.action);
+        }
+      });
       panel.addEventListener("mousedown", (e) => {
         const row = e.target.closest(".action-row");
         if (!row || !row.dataset.action) return;
