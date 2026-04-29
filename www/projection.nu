@@ -43,6 +43,22 @@ export def empty []: nothing -> record {
   {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null setMimeClipId: null clipCursors: {} selectionExplicit: false frameId: null}
 }
 
+# Pick the id that occupies the same slot after `removed` is dropped from
+# `ids`. Falls back to the last remaining id when the removed one was the
+# bottom, and null when nothing remains. Used by stack/clip delete to keep
+# the cursor under the user's eye.
+def slot-after-removal [ids: list, removed: any]: nothing -> any {
+  let idx = $ids | enumerate | where item == $removed | get index.0?
+  let post = $ids | where {|x| $x != $removed }
+  if $idx == null or ($post | is-empty) {
+    null
+  } else if $idx >= ($post | length) {
+    $post | last
+  } else {
+    $post | get $idx
+  }
+}
+
 export def sorted-clips [stack: record]: nothing -> list {
   if $stack.sort == "manual" {
     $stack.clips | sort-by {|c| [($c.position? | default "") $c.id]}
@@ -149,15 +165,7 @@ def stack-delete [state: record, frame: record] {
     $state.selectedStackId
   } else {
     let pre = $state.stacks | sort-by lastTouched | reverse | get id
-    let idx = $pre | enumerate | where item == $id | get index.0?
-    let post = $pre | where {|x| $x != $id }
-    if $idx == null or ($post | is-empty) {
-      null
-    } else if $idx >= ($post | length) {
-      $post | last
-    } else {
-      $post | get $idx
-    }
+    slot-after-removal $pre $id
   }
   # If we're landing on a different stack, restore its memorized cursor;
   # otherwise leave selectedClipId alone (reconcile will sort it out).
@@ -287,16 +295,7 @@ def clip-delete [state: record, frame: record] {
   let new_selected = if $owner == null or $state.selectedClipId != $clip_id {
     $state.selectedClipId
   } else {
-    let pre = sorted-clips $owner | get id
-    let idx = $pre | enumerate | where item == $clip_id | get index.0?
-    let post = $pre | where {|x| $x != $clip_id }
-    if $idx == null or ($post | is-empty) {
-      null
-    } else if $idx >= ($post | length) {
-      $post | last
-    } else {
-      $post | get $idx
-    }
+    slot-after-removal (sorted-clips $owner | get id) $clip_id
   }
   $state | update stacks $stacks | update selectedClipId $new_selected
 }
