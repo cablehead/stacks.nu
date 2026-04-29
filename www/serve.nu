@@ -233,8 +233,8 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
 def panel-actions-for [mode: string, ctx: record]: nothing -> list {
   if $mode == "set-mime" {
     return [
-      {action: "set-mime.plain"    label: "Plain text" keys: (glyphs [P]) target: "mime" require: "always" groupStart: false}
-      {action: "set-mime.markdown" label: "Markdown"   keys: (glyphs [M]) target: "mime" require: "always" groupStart: false}
+      {action: "set-mime.plain"    label: "Plain text" keys: [] target: "mime" require: "always" groupStart: false}
+      {action: "set-mime.markdown" label: "Markdown"   keys: [] target: "mime" require: "always" groupStart: false}
     ]
   }
   let items = [
