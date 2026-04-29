@@ -9,6 +9,17 @@
 #
 # All builders are pure (no store access). `send` is the only side effect.
 
+# Merge non-null fields from `opts` into the input record. Keeps the optional-
+# flag pattern declarative -- callers list every flag once instead of guarding
+# each with `if $x != null { upsert ... }`.
+def merge-some [opts: record]: record -> record {
+  let base = $in
+  $opts
+  | items {|k, v| {key: $k value: $v}}
+  | where value != null
+  | reduce -f $base {|it, acc| $acc | upsert $it.key $it.value}
+}
+
 # --- stacks ------------------------------------------------------------------
 
 @example "Build a stack.add frame request" {
@@ -29,9 +40,7 @@ export def "stack update" [
   --name: string
   --sort: string             # "auto" | "manual"
 ]: nothing -> record {
-  mut meta = {id: $id}
-  if $name != null { $meta = $meta | upsert name $name }
-  if $sort != null { $meta = $meta | upsert sort $sort }
+  let meta = {id: $id} | merge-some {name: $name sort: $sort}
   {topic: "stack.update" ttl: "forever" meta: $meta}
 }
 
@@ -74,8 +83,7 @@ export def "clip add" [
   --position: string         # fractional index; only honored when stack sort=manual
 ]: any -> record {
   let body = $in
-  mut meta = {stack_id: $stack_id mime_type: $mime_type}
-  if $position != null { $meta = $meta | upsert position $position }
+  let meta = {stack_id: $stack_id mime_type: $mime_type} | merge-some {position: $position}
   {topic: "clip.add" ttl: "forever" meta: $meta body: $body}
 }
 
@@ -95,9 +103,7 @@ export def "clip move" [
   if $to_stack == null and $position == null {
     error make {msg: "clip move needs --to-stack and/or --position"}
   }
-  mut meta = {id: $id}
-  if $to_stack != null { $meta = $meta | upsert stack_id $to_stack }
-  if $position != null { $meta = $meta | upsert position $position }
+  let meta = {id: $id} | merge-some {stack_id: $to_stack position: $position}
   {topic: "clip.patch" ttl: "forever" meta: $meta}
 }
 
