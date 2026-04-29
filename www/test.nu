@@ -20,35 +20,35 @@ const FRAMES = [
 
 print "1. project: end-to-end fold over synthetic frames"
 let state = $FRAMES | projection project
-assert (($state.stacks | length) == 2)
+assert equal ($state.stacks | length) 2
 let s1 = $state.stacks | where id == "s1" | first
-assert ($s1.name == "Recent")
-assert (($s1.clips | length) == 0)
+assert equal $s1.name "Recent"
+assert equal ($s1.clips | length) 0
 let s2 = $state.stacks | where id == "s2" | first
-assert (($s2.clips | length) == 2)
+assert equal ($s2.clips | length) 2
 print "   ok"
 
 print "2. project: selection defaults to first stack / first clip"
 # After all FRAMES, s1 is empty and s2 has clips. Projection picks s1 (first
 # stack), and selectedClipId is null because s1 has no clips.
-assert ($state.selectedStackId == "s1") $"got ($state.selectedStackId)"
-assert ($state.selectedClipId == null)
+assert equal $state.selectedStackId "s1"
+assert equal $state.selectedClipId null
 print "   ok"
 
 print "3. stack.select cycle: down then up returns to start"
 let with_sel = $FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {action: "down"}}
 ] | projection project
-assert ($with_sel.selectedStackId == "s2")
+assert equal $with_sel.selectedStackId "s2"
 # s2 has its original c3 plus the moved c1. sorted-clips for manual sort
 # orders by position; c1's position "am" sorts after c3's "a".
-assert ($with_sel.selectedClipId == "c3") $"got ($with_sel.selectedClipId)"
+assert equal $with_sel.selectedClipId "c3"
 
 let cycled = $FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {action: "down"}}
   {topic: "stack.select" id: "x" hash: null meta: {action: "up"}}
 ] | projection project
-assert ($cycled.selectedStackId == "s1")
+assert equal $cycled.selectedStackId "s1"
 print "   ok"
 
 print "4. clip.select cycle: within selected stack"
@@ -57,7 +57,7 @@ let on_s2 = $FRAMES | append [
   {topic: "clip.select"  id: "x" hash: null meta: {action: "down"}}
 ] | projection project
 # stack.select to s2 starts on c3 (first by manual position); down -> c1
-assert ($on_s2.selectedClipId == "c1") $"got ($on_s2.selectedClipId)"
+assert equal $on_s2.selectedClipId "c1"
 print "   ok"
 
 print "5. project-stream: silent until xs.threshold; threshold emit has selection"
@@ -67,9 +67,9 @@ let stream_input = ($FRAMES | first 2)
 let outs = $stream_input | projection project-stream
 let at_threshold = $outs | first
 # Default tracks lastTouched-desc; s2 was added after s1 with no explicit select.
-assert ($at_threshold.selectedStackId == "s2") "threshold emit should pick the most recent stack"
+assert equal $at_threshold.selectedStackId "s2" "threshold emit should pick the most recent stack"
 let final = $outs | last
-assert (($final.stacks | where id == "s2" | first | get clips | length) == 2)
+assert equal ($final.stacks | where id == "s2" | first | get clips | length) 2
 print "   ok"
 
 print "5a. clip.add into the selected auto stack bumps selection to the new clip"
@@ -79,7 +79,7 @@ let bumped = $FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {id: "s1"}}
   {topic: "clip.add"     id: "c9" hash: "sha256-zzz" meta: {stack_id: "s1" mime_type: "text/plain"}}
 ] | projection project
-assert ($bumped.selectedClipId == "c9") $"auto bump expected c9, got ($bumped.selectedClipId)"
+assert equal $bumped.selectedClipId "c9" $"auto bump expected c9"
 
 # Manual stack: no bump -- user-curated order isn't disrupted.
 let manual = $FRAMES | append [
@@ -87,7 +87,7 @@ let manual = $FRAMES | append [
   {topic: "clip.select"  id: "x" hash: null meta: {id: "c3"}}
   {topic: "clip.add"     id: "c8" hash: "sha256-yyy" meta: {stack_id: "s2" mime_type: "text/plain" position: "z"}}
 ] | projection project
-assert ($manual.selectedClipId == "c3") $"manual should not bump, got ($manual.selectedClipId)"
+assert equal $manual.selectedClipId "c3" $"manual should not bump"
 print "   ok"
 
 print "5c. stack ordering: lastTouched bumps with clip activity"
@@ -98,8 +98,8 @@ let touched = [
   {topic: "stack.add" id: "a2" hash: null meta: {name: "Second" sort: "auto"}}
   {topic: "clip.add"  id: "a3" hash: "x" meta: {stack_id: "a1" mime_type: "text/plain"}}
 ] | projection project
-assert ($touched.stacks.0.lastTouched == "a3") $"a1.lastTouched should be a3 after the clip.add, got ($touched.stacks.0.lastTouched)"
-assert ($touched.stacks.1.lastTouched == "a2") "untouched a2 should still hold its add id"
+assert equal $touched.stacks.0.lastTouched "a3" $"a1.lastTouched should be a3 after the clip.add"
+assert equal $touched.stacks.1.lastTouched "a2" "untouched a2 should still hold its add id"
 
 # stack.update also bumps activity.
 let renamed_state = [
@@ -107,7 +107,7 @@ let renamed_state = [
   {topic: "stack.add" id: "a2" hash: null meta: {name: "Second" sort: "auto"}}
   {topic: "stack.update" id: "a4" hash: null meta: {id: "a1" name: "Renamed"}}
 ] | projection project
-assert (($renamed_state.stacks | where id == "a1" | first | get lastTouched) == "a4") "rename should bump a1"
+assert equal ($renamed_state.stacks | where id == "a1" | first | get lastTouched) "a4" "rename should bump a1"
 print "   ok"
 
 print "5e. default selection tracks lastTouched until user picks explicitly"
@@ -117,7 +117,7 @@ let startup = [
   {topic: "stack.add" id: "a2" hash: null meta: {name: "Second" sort: "auto"}}
   {topic: "clip.add"  id: "a3" hash: "x" meta: {stack_id: "a2" mime_type: "text/plain"}}
 ] | projection project
-assert ($startup.selectedStackId == "a2") $"expected a2, got ($startup.selectedStackId)"
+assert equal $startup.selectedStackId "a2" $"expected a2"
 
 # Even though the streaming projection reconciles after every frame and
 # would otherwise pin selection to the first stack added.
@@ -134,7 +134,7 @@ let explicit = [
   {topic: "stack.select" id: "u1" hash: null meta: {id: "a1"}}
   {topic: "clip.add"    id: "a3" hash: "x" meta: {stack_id: "a2" mime_type: "text/plain"}}
 ] | projection project
-assert ($explicit.selectedStackId == "a1") $"explicit pick should stick; got ($explicit.selectedStackId)"
+assert equal $explicit.selectedStackId "a1" $"explicit pick should stick"
 assert $explicit.selectionExplicit
 print "   ok"
 
@@ -148,7 +148,7 @@ let cycled = [
   {topic: "clip.add"  id: "a3" hash: "x" meta: {stack_id: "a1" mime_type: "text/plain"}}
   {topic: "stack.select" id: "a4" hash: null meta: {action: "down"}}
 ] | projection project
-assert ($cycled.selectedStackId == "a2") $"cycle should follow render order; got ($cycled.selectedStackId)"
+assert equal $cycled.selectedStackId "a2" $"cycle should follow render order"
 print "   ok"
 
 print "5g. clip.update swaps hash, bumps clip+stack lastTouched, records versions"
@@ -159,11 +159,11 @@ let edited = [
 ] | projection project
 let stack = $edited.stacks | first
 let live_clip = $stack.clips | first
-assert ($live_clip.id == "c1") "clip identity is stable across edits"
-assert ($live_clip.hash == "h2") $"hash should track the latest update; got ($live_clip.hash)"
-assert ($live_clip.lastTouched == "u1") "edit bumps clip lastTouched"
-assert ($live_clip.versions == ["u1" "c1"]) "versions list is most-recent-first"
-assert ($stack.lastTouched == "u1") "edit bumps the stack's lastTouched"
+assert equal $live_clip.id "c1" "clip identity is stable across edits"
+assert equal $live_clip.hash "h2" $"hash should track the latest update"
+assert equal $live_clip.lastTouched "u1" "edit bumps clip lastTouched"
+assert equal $live_clip.versions (["u1" "c1"]) "versions list is most-recent-first"
+assert equal $stack.lastTouched "u1" "edit bumps the stack's lastTouched"
 
 # Render order in auto-sort follows clip lastTouched, so an edit floats
 # the older clip above a newer-but-untouched one.
@@ -174,7 +174,7 @@ let two = [
   {topic: "clip.update" id: "u9" hash: "h1b" meta: {id: "c1"}}
 ] | projection project
 let order = projection sorted-clips ($two.stacks | first) | get id
-assert ($order == ["c1" "c2"]) $"edited c1 should bubble above c2 in auto-sort; got ($order)"
+assert equal $order (["c1" "c2"]) $"edited c1 should bubble above c2 in auto-sort"
 print "   ok"
 
 print "5k. switching stacks restores the per-stack cursor"
@@ -194,8 +194,8 @@ let memorized = $memo_setup | append [
   {topic: "stack.select" id: "u" hash: null meta: {id: "m1"}}   # leave
   {topic: "stack.select" id: "u" hash: null meta: {id: "m2"}}   # come back
 ] | projection project
-assert ($memorized.selectedStackId == "m2")
-assert ($memorized.selectedClipId == "p2") $"expected p2 restored; got ($memorized.selectedClipId)"
+assert equal $memorized.selectedStackId "m2"
+assert equal $memorized.selectedClipId "p2" $"expected p2 restored"
 
 # Memorized clip removed -> falls back to first clip in render order.
 let stale = $memo_setup | append [
@@ -205,7 +205,7 @@ let stale = $memo_setup | append [
   {topic: "clip.delete"  id: "u" hash: null meta: {id: "p2"}}   # remove memorized
   {topic: "stack.select" id: "u" hash: null meta: {id: "m2"}}
 ] | projection project
-assert ($stale.selectedClipId == "p1") $"stale memory should fall back; got ($stale.selectedClipId)"
+assert equal $stale.selectedClipId "p1" $"stale memory should fall back"
 print "   ok"
 
 print "5l. stack.delete bounce restores the destination stack's cursor"
@@ -215,8 +215,8 @@ let bounced = $memo_setup | append [
   {topic: "stack.select" id: "u" hash: null meta: {id: "m1"}}   # switch to m1
   {topic: "stack.delete" id: "u" hash: null meta: {id: "m1"}}   # delete m1, bounce to m2
 ] | projection project
-assert ($bounced.selectedStackId == "m2")
-assert ($bounced.selectedClipId == "p2") $"bounce should restore p2; got ($bounced.selectedClipId)"
+assert equal $bounced.selectedStackId "m2"
+assert equal $bounced.selectedClipId "p2" $"bounce should restore p2"
 print "   ok"
 
 print "5h. clip.delete preserves cursor position within the stack"
@@ -236,21 +236,21 @@ let middle_gone = $DEL_FRAMES | append [
   {topic: "clip.select"  id: "x" hash: null meta: {id: "c2"}}
   {topic: "clip.delete"  id: "x" hash: null meta: {id: "c2"}}
 ] | projection project
-assert ($middle_gone.selectedClipId == "c3") $"slot kept; expected c3 got ($middle_gone.selectedClipId)"
+assert equal $middle_gone.selectedClipId "c3" $"slot kept; expected c3"
 
 let last_gone = $DEL_FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {id: "ds"}}
   {topic: "clip.select"  id: "x" hash: null meta: {id: "c3"}}
   {topic: "clip.delete"  id: "x" hash: null meta: {id: "c3"}}
 ] | projection project
-assert ($last_gone.selectedClipId == "c2") $"bottom falls back; expected c2 got ($last_gone.selectedClipId)"
+assert equal $last_gone.selectedClipId "c2" $"bottom falls back; expected c2"
 
 let top_gone = $DEL_FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {id: "ds"}}
   {topic: "clip.select"  id: "x" hash: null meta: {id: "c1"}}
   {topic: "clip.delete"  id: "x" hash: null meta: {id: "c1"}}
 ] | projection project
-assert ($top_gone.selectedClipId == "c2") $"top slot promotes c2; got ($top_gone.selectedClipId)"
+assert equal $top_gone.selectedClipId "c2" $"top slot promotes c2"
 
 # Deleting an unselected clip leaves the cursor alone.
 let other_gone = $DEL_FRAMES | append [
@@ -258,7 +258,7 @@ let other_gone = $DEL_FRAMES | append [
   {topic: "clip.select"  id: "x" hash: null meta: {id: "c2"}}
   {topic: "clip.delete"  id: "x" hash: null meta: {id: "c3"}}
 ] | projection project
-assert ($other_gone.selectedClipId == "c2") $"unrelated delete should not move the cursor"
+assert equal $other_gone.selectedClipId "c2" $"unrelated delete should not move the cursor"
 print "   ok"
 
 print "5i. stack.delete preserves cursor position across stacks"
@@ -275,80 +275,80 @@ let mid = $STACK_DEL_FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {id: "s2"}}
   {topic: "stack.delete" id: "x" hash: null meta: {id: "s2"}}
 ] | projection project
-assert ($mid.selectedStackId == "s1") $"slot kept; expected s1 got ($mid.selectedStackId)"
+assert equal $mid.selectedStackId "s1" $"slot kept; expected s1"
 
 # Selecting s1 (bottom slot), deleting s1 -> falls back to the new last (s2).
 let bottom = $STACK_DEL_FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {id: "s1"}}
   {topic: "stack.delete" id: "x" hash: null meta: {id: "s1"}}
 ] | projection project
-assert ($bottom.selectedStackId == "s2") $"bottom falls back; expected s2 got ($bottom.selectedStackId)"
+assert equal $bottom.selectedStackId "s2" $"bottom falls back; expected s2"
 
 # Selecting s3 (top slot), deleting s3 -> top slot promotes s2.
 let top = $STACK_DEL_FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {id: "s3"}}
   {topic: "stack.delete" id: "x" hash: null meta: {id: "s3"}}
 ] | projection project
-assert ($top.selectedStackId == "s2") $"top slot promotes s2; got ($top.selectedStackId)"
+assert equal $top.selectedStackId "s2" $"top slot promotes s2"
 
 # Deleting an unselected stack leaves the cursor alone.
 let other = $STACK_DEL_FRAMES | append [
   {topic: "stack.select" id: "x" hash: null meta: {id: "s2"}}
   {topic: "stack.delete" id: "x" hash: null meta: {id: "s3"}}
 ] | projection project
-assert ($other.selectedStackId == "s2") $"unrelated delete should not move the cursor"
+assert equal $other.selectedStackId "s2" $"unrelated delete should not move the cursor"
 print "   ok"
 
 print "5f. editor.open / editor.close toggle mode + editClipId"
 let editing = $FRAMES | append [
   {topic: "editor.open"  id: "u4" hash: null meta: {clip_id: "c1"}}
 ] | projection project
-assert ($editing.mode == "edit")
-assert ($editing.editClipId == "c1")
+assert equal $editing.mode "edit"
+assert equal $editing.editClipId "c1"
 
 let edit_done = $FRAMES | append [
   {topic: "editor.open"  id: "u4" hash: null meta: {clip_id: "c1"}}
   {topic: "editor.close" id: "u5" hash: null meta: {}}
 ] | projection project
-assert ($edit_done.mode == "main")
-assert ($edit_done.editClipId == null)
+assert equal $edit_done.mode "main"
+assert equal $edit_done.editClipId null
 print "   ok"
 
 print "5j. rename.open / rename.close toggle mode + renameStackId"
 let renaming = $FRAMES | append [
   {topic: "rename.open"  id: "u6" hash: null meta: {stack_id: "s2"}}
 ] | projection project
-assert ($renaming.mode == "rename")
-assert ($renaming.renameStackId == "s2")
+assert equal $renaming.mode "rename"
+assert equal $renaming.renameStackId "s2"
 
 let rename_done = $FRAMES | append [
   {topic: "rename.open"  id: "u6" hash: null meta: {stack_id: "s2"}}
   {topic: "rename.close" id: "u7" hash: null meta: {}}
 ] | projection project
-assert ($rename_done.mode == "main")
-assert ($rename_done.renameStackId == null)
+assert equal $rename_done.mode "main"
+assert equal $rename_done.renameStackId null
 print "   ok"
 
 print "5b. compose.open / compose.close toggle mode + composeStackId"
 let opened = $FRAMES | append [
   {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
 ] | projection project
-assert ($opened.mode == "compose")
-assert ($opened.composeStackId == "s2")
+assert equal $opened.mode "compose"
+assert equal $opened.composeStackId "s2"
 
 let closed = $FRAMES | append [
   {topic: "compose.open" id: "x" hash: null meta: {stack_id: "s2"}}
   {topic: "compose.close" id: "y" hash: null meta: {}}
 ] | projection project
-assert ($closed.mode == "main")
-assert ($closed.composeStackId == null)
+assert equal $closed.mode "main"
+assert equal $closed.composeStackId null
 print "   ok"
 
 print "6. apply-frame: ignores unknown topics"
 let s = projection empty
 let out = projection apply-frame $s {topic: "xs.pulse" id: "p" hash: null meta: null}
 # unknown topics still update frameId -- strip it before comparing
-assert (($out | reject frameId) == ($s | reject frameId))
+assert equal ($out | reject frameId) ($s | reject frameId)
 print "   ok"
 
 print "7. serve.nu: GET / returns the bootstrap HTML"
@@ -368,7 +368,7 @@ print "8. serve.nu: POST /stacks appends a stack.add frame"
 # `last` rather than `first` because bootstrap-if-empty seeds a Welcome
 # stack on the first source; the new Inbox is the most recent stack.add.
 let added = .cat | where topic == "stack.add" | last
-assert ($added.meta.name == "Inbox")
+assert equal $added.meta.name "Inbox"
 let stack_id = $added.id
 
 # Add a clip; body bytes go to CAS via xs.
@@ -379,53 +379,53 @@ let stack_id = $added.id
   query: {mime_type: "text/plain"}
 }
 let clip_frame = .cat | where topic == "clip.add" | last
-assert ($clip_frame.meta.stack_id == $stack_id)
+assert equal $clip_frame.meta.stack_id $stack_id
 assert ($clip_frame.hash != null) "clip body should be CAS-stored, hash populated"
 
 let live_state = .cat | projection project
 let stack = $live_state.stacks | where id == $stack_id | first
-assert ($stack.name == "Inbox")
-assert (($stack.clips | length) == 1)
+assert equal $stack.name "Inbox"
+assert equal ($stack.clips | length) 1
 print "   ok"
 
 print "9. stacks module: meta builders produce the documented shapes"
 let a = stack add "Inbox" --sort manual
-assert ($a == {topic: "stack.add" ttl: "forever" meta: {name: "Inbox" sort: "manual"}})
+assert equal $a ({topic: "stack.add" ttl: "forever" meta: {name: "Inbox" sort: "manual"}})
 
 let b = stack update "s1" --name "Renamed"
-assert ($b.topic == "stack.update")
-assert ($b.meta == {id: "s1" name: "Renamed"}) "stack update should omit unset fields"
+assert equal $b.topic "stack.update"
+assert equal $b.meta ({id: "s1" name: "Renamed"}) "stack update should omit unset fields"
 
 let c = stack delete "s1"
-assert ($c == {topic: "stack.delete" ttl: "forever" meta: {id: "s1"}})
+assert equal $c ({topic: "stack.delete" ttl: "forever" meta: {id: "s1"}})
 
 let d = "the body" | clip add "s2" --mime-type "text/plain" --position "am"
-assert ($d.topic == "clip.add")
-assert ($d.ttl == "forever")
-assert ($d.meta == {stack_id: "s2" mime_type: "text/plain" position: "am"})
-assert ($d.body == "the body") "clip add captures piped body"
+assert equal $d.topic "clip.add"
+assert equal $d.ttl "forever"
+assert equal $d.meta ({stack_id: "s2" mime_type: "text/plain" position: "am"})
+assert equal $d.body "the body" "clip add captures piped body"
 
 let d2 = clip add "s2"  # defaults: mime_type=text/plain, no position, body=null
-assert ($d2.meta == {stack_id: "s2" mime_type: "text/plain"})
+assert equal $d2.meta ({stack_id: "s2" mime_type: "text/plain"})
 
 let e = clip move "c1" --to-stack "s2" --position "z"
-assert ($e == {topic: "clip.patch" ttl: "forever" meta: {id: "c1" stack_id: "s2" position: "z"}})
+assert equal $e ({topic: "clip.patch" ttl: "forever" meta: {id: "c1" stack_id: "s2" position: "z"}})
 
 let e2 = clip move "c1" --position "n"
-assert ($e2 == {topic: "clip.patch" ttl: "forever" meta: {id: "c1" position: "n"}}) "clip move can reposition without changing stack"
+assert equal $e2 ({topic: "clip.patch" ttl: "forever" meta: {id: "c1" position: "n"}}) "clip move can reposition without changing stack"
 
 let f = clip delete "c1"
-assert ($f == {topic: "clip.delete" ttl: "forever" meta: {id: "c1"}})
+assert equal $f ({topic: "clip.delete" ttl: "forever" meta: {id: "c1"}})
 
 let g = stack select "s1"
-assert ($g == {topic: "stack.select" ttl: "ephemeral" meta: {id: "s1"}})
+assert equal $g ({topic: "stack.select" ttl: "ephemeral" meta: {id: "s1"}})
 
 let g2 = stack select --down
-assert ($g2.meta == {action: "down"})
-assert ($g2.ttl == "ephemeral")
+assert equal $g2.meta ({action: "down"})
+assert equal $g2.ttl "ephemeral"
 
 let h = clip select --up
-assert ($h == {topic: "clip.select" ttl: "ephemeral" meta: {action: "up"}})
+assert equal $h ({topic: "clip.select" ttl: "ephemeral" meta: {action: "up"}})
 print "   ok"
 
 print "10. stacks module: builder errors when underspecified"
@@ -438,33 +438,33 @@ print "   ok"
 print "11. stacks module: append writes through xs and pairs with projection"
 stack add "From module" --sort auto | send | ignore
 let mod_stack = .cat | where topic == "stack.add" | last  # newest
-assert ($mod_stack.meta.name == "From module")
+assert equal $mod_stack.meta.name "From module"
 
 # Add a clip via the module, then verify projection sees it.
 "hello via module" | clip add $mod_stack.id --mime-type "text/plain" | send | ignore
 let projected = .cat | projection project
 let s = $projected.stacks | where id == $mod_stack.id | first
-assert (($s.clips | length) == 1)
+assert equal ($s.clips | length) 1
 let c = $s.clips | first
-assert ($c.mime_type == "text/plain")
+assert equal $c.mime_type "text/plain"
 assert ($c.hash != null) "clip body should be CAS-stored"
 
 # Selection: ephemeral frames aren't persisted, but `send` returns the
 # appended frame so we can verify topic + meta were what the protocol expects.
 let sel_frame = stack select $mod_stack.id | send
-assert ($sel_frame.topic == "stack.select")
-assert ($sel_frame.meta.id == $mod_stack.id)
+assert equal $sel_frame.topic "stack.select"
+assert equal $sel_frame.meta.id $mod_stack.id
 print "   ok"
 
 print "12. serve.nu: POST /stacks/new takes the name from the body and selects it"
 "2026-04-28 14:32" | do $handler {method: "POST" path: "/stacks/new" headers: {} query: {}}
 let named = .cat | where topic == "stack.add" | last
-assert ($named.meta.name == "2026-04-28 14:32") $"got ($named.meta.name?)"
+assert equal $named.meta.name "2026-04-28 14:32"
 
 # Empty body -> name is null (left to the caller; the route doesn't fabricate).
 do $handler {method: "POST" path: "/stacks/new" headers: {} query: {}}
 let unnamed = .cat | where topic == "stack.add" | last
-assert ($unnamed.meta.name? == null) "empty body should leave the name null"
+assert equal $unnamed.meta.name? null "empty body should leave the name null"
 print "   ok"
 
 print "12b. serve.nu: /editor/submit emits clip.update, clip identity stays stable"
@@ -486,14 +486,14 @@ let original = .cat | where topic == "clip.add" | last
 
 # Single update event references the original by id; no add+delete dance.
 let updates = .cat | where topic == "clip.update" and meta.id == $original.id
-assert (($updates | length) == 1) "edit produces exactly one clip.update"
+assert equal ($updates | length) 1 "edit produces exactly one clip.update"
 assert (($updates | first | get hash) != null) "clip.update body is CAS-stored"
 
 let projected = .cat | projection project
 let live_clip = $projected.stacks | where id == $edit_stack.id | first | get clips | first
-assert ($live_clip.id == $original.id) "clip id stays stable across edit"
-assert ($live_clip.position == "a") "manual position survives"
-assert ($live_clip.hash == ($updates | first | get hash)) "projection tracks the latest hash"
+assert equal $live_clip.id $original.id "clip id stays stable across edit"
+assert equal $live_clip.position "a" "manual position survives"
+assert equal $live_clip.hash ($updates | first | get hash) "projection tracks the latest hash"
 print "   ok"
 
 print "12c. serve.nu: /stacks/:id/rename/submit emits stack.update with new name"
@@ -508,10 +508,10 @@ let to_rename = .cat | where topic == "stack.add" | last
 }
 let rename_frame = .cat | where topic == "stack.update" and meta.id == $to_rename.id | last
 assert ($rename_frame != null) "/rename/submit should emit a stack.update"
-assert ($rename_frame.meta.name == "Renamed via route") $"got ($rename_frame.meta.name?)"
+assert equal $rename_frame.meta.name "Renamed via route"
 let proj = .cat | projection project
 let renamed = $proj.stacks | where id == $to_rename.id | first
-assert ($renamed.name == "Renamed via route")
+assert equal $renamed.name "Renamed via route"
 print "   ok"
 
 print "13. serve.nu: actions registry, keymap, and status bar all reference action ids"
