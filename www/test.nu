@@ -344,6 +344,96 @@ assert equal $closed.mode "main"
 assert equal $closed.composeStackId null
 print "   ok"
 
+print "5m. clip.delete captures snapshot to state.deleted; clip.restore brings it back"
+let trash_setup = [
+  {topic: "stack.add" id: "ts1" hash: null meta: {name: "T" sort: "manual"}}
+  {topic: "clip.add"  id: "tc1" hash: "h1" meta: {stack_id: "ts1" mime_type: "text/plain" position: "a"}}
+  {topic: "clip.add"  id: "tc2" hash: "h2" meta: {stack_id: "ts1" mime_type: "text/plain" position: "b"}}
+]
+let after_del = $trash_setup | append [
+  {topic: "clip.delete" id: "td1" hash: null meta: {id: "tc1"}}
+] | projection project
+assert equal ($after_del.deleted | length) 1
+let entry = $after_del.deleted | first
+assert equal $entry.frame_id "td1"
+assert equal $entry.kind "clip"
+assert equal $entry.snapshot.stack_id "ts1"
+assert equal $entry.snapshot.clip.id "tc1"
+let s_after = $after_del.stacks | where id == "ts1" | first
+assert equal ($s_after.clips | length) 1
+
+let after_restore = $trash_setup | append [
+  {topic: "clip.delete"  id: "td1" hash: null meta: {id: "tc1"}}
+  {topic: "clip.restore" id: "tr1" hash: null meta: {target: "td1"}}
+] | projection project
+assert equal ($after_restore.deleted | length) 0
+let s_back = $after_restore.stacks | where id == "ts1" | first
+assert equal ($s_back.clips | length) 2
+let restored = $s_back.clips | where id == "tc1" | first
+assert equal $restored.hash "h1"
+assert equal $restored.position "a"
+print "   ok"
+
+print "5n. stack.delete captures snapshot incl. clips; stack.restore brings the whole thing back"
+let after_sdel = $trash_setup | append [
+  {topic: "stack.delete" id: "tsd1" hash: null meta: {id: "ts1"}}
+] | projection project
+assert equal ($after_sdel.stacks | length) 0
+assert equal ($after_sdel.deleted | length) 1
+let sentry = $after_sdel.deleted | first
+assert equal $sentry.kind "stack"
+assert equal ($sentry.snapshot.stack.clips | length) 2
+
+let after_srestore = $trash_setup | append [
+  {topic: "stack.delete"  id: "tsd1" hash: null meta: {id: "ts1"}}
+  {topic: "stack.restore" id: "tsr1" hash: null meta: {target: "tsd1"}}
+] | projection project
+assert equal ($after_srestore.deleted | length) 0
+let back_stack = $after_srestore.stacks | where id == "ts1" | first
+assert equal ($back_stack.name) "T"
+assert equal ($back_stack.clips | length) 2
+print "   ok"
+
+print "5o. clip.restore is a no-op when parent stack is itself deleted"
+let blocked = $trash_setup | append [
+  {topic: "clip.delete"  id: "td1" hash: null meta: {id: "tc1"}}
+  {topic: "stack.delete" id: "tsd1" hash: null meta: {id: "ts1"}}
+  {topic: "clip.restore" id: "tr1" hash: null meta: {target: "td1"}}
+] | projection project
+# parent ts1 still in trash, so restore did nothing
+assert equal ($blocked.deleted | length) 2
+# but restoring the stack first then the clip works
+let ordered = $trash_setup | append [
+  {topic: "clip.delete"   id: "td1"  hash: null meta: {id: "tc1"}}
+  {topic: "stack.delete"  id: "tsd1" hash: null meta: {id: "ts1"}}
+  {topic: "stack.restore" id: "tsr1" hash: null meta: {target: "tsd1"}}
+  {topic: "clip.restore"  id: "tr1"  hash: null meta: {target: "td1"}}
+] | projection project
+assert equal ($ordered.deleted | length) 0
+let ordered_stack = $ordered.stacks | where id == "ts1" | first
+# stack snapshot was taken with one clip (tc1 already deleted before stack.delete);
+# clip.restore then puts tc1 back. expect 2 clips total.
+assert equal ($ordered_stack.clips | length) 2
+print "   ok"
+
+print "5p. trash.open / trash.close toggle mode and clear selection"
+let in_trash = $trash_setup | append [
+  {topic: "clip.delete" id: "td1" hash: null meta: {id: "tc1"}}
+  {topic: "trash.open"  id: "to1" hash: null meta: {}}
+  {topic: "deleted.select" id: "ds1" hash: null meta: {id: "td1"}}
+] | projection project
+assert equal $in_trash.mode "trash"
+assert equal $in_trash.selectedDeletedFrameId "td1"
+let closed_trash = $trash_setup | append [
+  {topic: "clip.delete" id: "td1" hash: null meta: {id: "tc1"}}
+  {topic: "trash.open"  id: "to1" hash: null meta: {}}
+  {topic: "deleted.select" id: "ds1" hash: null meta: {id: "td1"}}
+  {topic: "trash.close" id: "tx1" hash: null meta: {}}
+] | projection project
+assert equal $closed_trash.mode "main"
+assert equal $closed_trash.selectedDeletedFrameId null
+print "   ok"
+
 print "6. apply-frame: ignores unknown topics"
 let s = projection empty
 let out = projection apply-frame $s {topic: "xs.pulse" id: "p" hash: null meta: null}

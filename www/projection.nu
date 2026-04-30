@@ -40,7 +40,7 @@
 # float to the top), manual = position asc.
 
 export def empty []: nothing -> record {
-  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null setMimeClipId: null clipCursors: {} selectionExplicit: false frameId: null}
+  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null setMimeClipId: null clipCursors: {} selectionExplicit: false frameId: null deleted: [] selectedDeletedFrameId: null}
 }
 
 # Pick the id that occupies the same slot after `removed` is dropped from
@@ -97,6 +97,11 @@ export def apply-frame [state: record, frame: record]: nothing -> record {
     "actions.close" => ($state | update mode "main")
     "set-mime.open" => ($state | update mode "set-mime" | update setMimeClipId ($frame.meta?.clip_id?))
     "set-mime.close" => ($state | update mode "main" | update setMimeClipId null)
+    "trash.open" => ($state | update mode "trash")
+    "trash.close" => ($state | update mode "main" | update selectedDeletedFrameId null)
+    "deleted.select" => (deleted-select $state $frame)
+    "clip.restore" => (clip-restore $state $frame)
+    "stack.restore" => (stack-restore $state $frame)
     _ => $state
   }
   remember-cursor $s | update frameId ($frame.id? | default $s.frameId)
@@ -157,6 +162,7 @@ def stack-update [state: record, frame: record] {
 
 def stack-delete [state: record, frame: record] {
   let id = $frame.meta.id
+  let victim = $state.stacks | where id == $id | get -i 0
   let stacks = $state.stacks | where id != $id
   # Preserve cursor position across stacks: if the deleted stack was selected,
   # take whatever now sits in the same slot (render order is lastTouched-desc),
@@ -185,11 +191,15 @@ def stack-delete [state: record, frame: record] {
   let cursors = if ($id in ($state.clipCursors | columns)) {
     $state.clipCursors | reject $id
   } else { $state.clipCursors }
+  let deleted = if $victim == null { $state.deleted } else {
+    [{frame_id: $frame.id kind: "stack" snapshot: {stack: $victim} deleted_at: $frame.id}] | append $state.deleted
+  }
   $state
     | update stacks $stacks
     | update selectedStackId $new_selected
     | update selectedClipId $new_clip
     | update clipCursors $cursors
+    | update deleted $deleted
 }
 
 def clip-add [state: record, frame: record] {
@@ -285,19 +295,62 @@ def clip-delete [state: record, frame: record] {
     | where ($it.clips | any {|c| $c.id == $clip_id })
     | get -i 0
   let owner_id = $owner | get -i id
+  let victim = if $owner == null { null } else { $owner.clips | where id == $clip_id | first }
   let stacks = $state.stacks | each {|s|
     let cleaned = $s | update clips ($s.clips | where id != $clip_id)
     if $s.id == $owner_id { $cleaned | update lastTouched $frame.id } else { $cleaned }
   }
-  # Preserve cursor position within the stack: if the deleted clip was the
-  # selected one, take whatever now occupies that slot (or fall back to the
-  # last remaining clip when the deleted one was the bottom).
   let new_selected = if $owner == null or $state.selectedClipId != $clip_id {
     $state.selectedClipId
   } else {
     slot-after-removal (sorted-clips $owner | get id) $clip_id
   }
-  $state | update stacks $stacks | update selectedClipId $new_selected
+  let deleted = if $victim == null { $state.deleted } else {
+    [{frame_id: $frame.id kind: "clip" snapshot: {clip: $victim stack_id: $owner_id} deleted_at: $frame.id}] | append $state.deleted
+  }
+  $state | update stacks $stacks | update selectedClipId $new_selected | update deleted $deleted
+}
+
+# Restore a previously-deleted clip. frame.meta.target points at the
+# clip.delete frame's id; we read the snapshot out of state.deleted and
+# splice the clip back into its original stack.
+def clip-restore [state: record, frame: record] {
+  let target = $frame.meta?.target?
+  if $target == null { return $state }
+  let entry = $state.deleted | where frame_id == $target | get -i 0
+  if $entry == null or $entry.kind != "clip" { return $state }
+  let stack_id = $entry.snapshot.stack_id
+  let parent_alive = ($state.stacks | any {|s| $s.id == $stack_id })
+  if not $parent_alive { return $state }
+  let clip = $entry.snapshot.clip
+  let stacks = $state.stacks | each {|s|
+    if $s.id == $stack_id {
+      $s | update clips ($s.clips | append $clip)
+    } else { $s }
+  }
+  let deleted = $state.deleted | where frame_id != $target
+  $state | update stacks $stacks | update deleted $deleted
+}
+
+def stack-restore [state: record, frame: record] {
+  let target = $frame.meta?.target?
+  if $target == null { return $state }
+  let entry = $state.deleted | where frame_id == $target | get -i 0
+  if $entry == null or $entry.kind != "stack" { return $state }
+  let stack = $entry.snapshot.stack
+  let stacks = $state.stacks | append $stack
+  let deleted = $state.deleted | where frame_id != $target
+  $state | update stacks $stacks | update deleted $deleted
+}
+
+def deleted-select [state: record, frame: record] {
+  let ids = $state.deleted | get frame_id
+  let new_id = if ($frame.meta?.id? != null) {
+    if ($frame.meta.id in $ids) { $frame.meta.id } else { $state.selectedDeletedFrameId }
+  } else {
+    cycle $ids $state.selectedDeletedFrameId ($frame.meta?.action? | default "")
+  }
+  $state | update selectedDeletedFrameId $new_id
 }
 
 # Cycle by `action`, jump by `id`. "top" jumps to the first id in render order.
