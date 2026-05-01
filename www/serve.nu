@@ -101,6 +101,9 @@ const IMPULSE_TOPICS = [
   "actions.close"
   "set-mime.open"
   "set-mime.close"
+  "trash.open"
+  "trash.close"
+  "deleted.select"
 ]
 
 # Action registry. Action id -> JS string. Triggers (keymap, status-bar
@@ -730,6 +733,24 @@ bootstrap-if-empty
     })
     (route {method: "DELETE" path-matches: "/clips/:id"} {|req ctx|
       .append clip.delete --meta {id: $ctx.id}
+    })
+
+    # ---- trash ----
+    # Restore a deleted entity. The path id is the original delete frame's id;
+    # we look it up to dispatch on whether it was a clip or stack delete, then
+    # emit the matching restore topic.
+    (route {method: "POST" path-matches: "/trash/restore/:frame_id"} {|req ctx|
+      let frame = .get $ctx.frame_id
+      if $frame == null {
+        return ("Not Found" | metadata set { merge {'http.response': {status: 404}} })
+      }
+      match $frame.topic {
+        "clip.delete" => { .append clip.restore --meta {target: $ctx.frame_id} | ignore }
+        "stack.delete" => { .append stack.restore --meta {target: $ctx.frame_id} | ignore }
+        _ => { return ("frame is not a delete" | metadata set { merge {'http.response': {status: 400}} }) }
+      }
+      .append trash.close --meta {} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
     # ---- content + assets ----
