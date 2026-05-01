@@ -45,6 +45,29 @@ def glyphs [keys: list<string>]: nothing -> list<string> {
   $keys | each {|k| $KEY_GLYPH | get -i $k | default $k }
 }
 
+# Platform modifier resolved server-side. keys.js emits `cmd+...` from
+# metaKey (Mac Cmd) and `ctrl+...` from ctrlKey, so whichever string we
+# send is what will match the user's actual keystroke.
+def mod-key [is_mac: bool]: nothing -> string {
+  if $is_mac { "cmd" } else { "ctrl" }
+}
+def mod-glyph [is_mac: bool]: nothing -> string {
+  if $is_mac { "Cmd" } else { "Ctrl" }
+}
+
+# Detect the viewer's platform from request headers. sec-ch-ua-platform is
+# the modern signal (Chromium); fall back to user-agent substring match.
+# Defaults to true (Mac) when nothing's available, since the original
+# audience was Mac users.
+def is-mac [req: record]: nothing -> bool {
+  let ch = $req.headers? | default {} | get -i "sec-ch-ua-platform" | default ""
+  if ($ch | str length) > 0 {
+    return (($ch | str downcase | str trim --char '"') == "macos")
+  }
+  let ua = $req.headers? | default {} | get -i "user-agent" | default ""
+  ($ua | str contains "Mac OS X") or ($ua | str contains "Macintosh")
+}
+
 # JS snippets the client evaluates. URL string interpolation happens here so
 # the registry value is exactly the JS the browser runs -- no client-side
 # template language.
@@ -181,11 +204,12 @@ def actions-main [ctx: record]: nothing -> record {
 # Keyboard triggers: combo -> action id. Same combo normalization as keys.js
 # (`cmd+ctrl+alt+shift+key`, letters lowercased).
 def keymap-for [mode: string ctx: record]: nothing -> record {
+  let mod = mod-key $ctx.isMac
   match $mode {
-    "compose" => {"cmd+enter": "compose.save" "escape": "compose.cancel"}
-    "edit" => {"cmd+enter": "edit.save" "escape": "edit.cancel"}
-    "rename" => {"enter": "rename.save" "cmd+enter": "rename.save" "escape": "rename.cancel"}
-    "actions" => {"escape": "actions.cancel" "cmd+k": "actions.cancel"}
+    "compose" => ({"escape": "compose.cancel"} | upsert $"($mod)+enter" "compose.save")
+    "edit" => ({"escape": "edit.cancel"} | upsert $"($mod)+enter" "edit.save")
+    "rename" => ({"enter": "rename.save" "escape": "rename.cancel"} | upsert $"($mod)+enter" "rename.save")
+    "actions" => ({"escape": "actions.cancel"} | upsert $"($mod)+k" "actions.cancel")
     "set-mime" => {"escape": "set-mime.cancel"}
     "trash" => {
       "escape": "trash.cancel"
@@ -201,8 +225,9 @@ def keymap-for [mode: string ctx: record]: nothing -> record {
 }
 
 def keymap-main [ctx: record]: nothing -> record {
+  let mod = mod-key $ctx.isMac
   let with_trash = if $ctx.hasDeleted { {"shift+t": "trash.open"} } else { {} }
-  let base = $with_trash | merge {
+  let base = ($with_trash | upsert $"($mod)+k" "actions.open") | merge {
       "j": "clip.next"
       "k": "clip.prev"
       "ctrl+n": "clip.next"
@@ -213,7 +238,6 @@ def keymap-main [ctx: record]: nothing -> record {
       "shift+0": "stack.top"
       "shift+)": "stack.top"
       "shift+n": "stack.new"
-      "cmd+k": "actions.open"
     }
   let with_stack = if $ctx.selectedStackId != null {
     $base
@@ -232,13 +256,14 @@ def keymap-main [ctx: record]: nothing -> record {
 
 # Status bar (right side): visible bindings, each referencing an action id.
 def bindings-for [mode: string ctx: record]: nothing -> list {
+  let m = mod-glyph $ctx.isMac
   match $mode {
     "compose" => [
-      {action: "compose.save" label: "save" keys: (glyphs [Cmd Enter])}
+      {action: "compose.save" label: "save" keys: (glyphs [$m Enter])}
       {action: "compose.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
     "edit" => [
-      {action: "edit.save" label: "save" keys: (glyphs [Cmd Enter])}
+      {action: "edit.save" label: "save" keys: (glyphs [$m Enter])}
       {action: "edit.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
     "rename" => [
@@ -262,7 +287,7 @@ def bindings-for [mode: string ctx: record]: nothing -> list {
       {action: "clip.prev" label: "prev clip" keys: (glyphs [K])}
       {action: "stack.next" label: "next stack" keys: (glyphs [Shift J])}
       {action: "stack.prev" label: "prev stack" keys: (glyphs [Shift K])}
-      {action: "actions.open" label: "actions" keys: (glyphs [Cmd K])}
+      {action: "actions.open" label: "actions" keys: (glyphs [$m K])}
     ]
   }
 }
@@ -347,7 +372,9 @@ def find-clip [state: record clip_id: any]: nothing -> any {
 }
 
 # Take the projection state and turn it into the template's view model.
-def view-model [state: record]: nothing -> record {
+# is_mac selects platform-correct modifier keys/glyphs (Cmd on Mac, Ctrl
+# elsewhere). Defaults to true for synthetic callers (design page, tests).
+def view-model [state: record --is-mac = true]: nothing -> record {
   let stack = $state.stacks | where id == $state.selectedStackId | get -i 0
   let raw_clips = if $stack == null { [] } else { projection sorted-clips $stack }
   let clips = $raw_clips | each {|c| hydrate-clip $c }
@@ -414,6 +441,7 @@ def view-model [state: record]: nothing -> record {
     selectedStack: $stack
     selectedDeletedFrameId: $selected_deleted
     hasDeleted: $has_deleted
+    isMac: $is_mac
   }
   let actions = actions-for $state.mode $ctx
   let keymap = keymap-for $state.mode $ctx
@@ -447,8 +475,8 @@ def view-model [state: record]: nothing -> record {
   }
 }
 
-def render-event [state: record]: nothing -> record {
-  let html = view-model $state | .mj ($script_dir | path join "templates/three-pane.html.j2")
+def render-event [state: record --is-mac = true]: nothing -> record {
+  let html = view-model $state --is-mac=$is_mac | .mj ($script_dir | path join "templates/three-pane.html.j2")
   let elements = $html | lines | each {|l| $"elements ($l)" } | str join "\n"
   {event: "datastar-patch-elements" data: $"selector main\n($elements)"}
 }
@@ -521,9 +549,9 @@ def design-state [variant: string]: nothing -> record {
 # Render one mode into a self-contained HTML doc suitable for iframe srcdoc.
 # No scripts loaded -- the page is inert; click handlers reference an undefined
 # window.actions and silently no-op.
-def design-tile-html [variant: string]: nothing -> string {
+def design-tile-html [variant: string --is-mac = true]: nothing -> string {
   let state = design-state $variant
-  let main_html = view-model $state | .mj ($script_dir | path join "templates/three-pane.html.j2")
+  let main_html = view-model $state --is-mac=$is_mac | .mj ($script_dir | path join "templates/three-pane.html.j2")
   [
     "<!DOCTYPE html><html><head><meta charset='utf-8'>"
     "<link rel='stylesheet' href='/stellar.css'>"
@@ -535,7 +563,7 @@ def design-tile-html [variant: string]: nothing -> string {
   ] | str join
 }
 
-def design-page []: nothing -> any {
+def design-page [--is-mac = true]: nothing -> any {
   let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions" "set-mime" "trash"]
   (HTML
   (HEAD
@@ -551,7 +579,7 @@ def design-page []: nothing -> any {
   (DIV {style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(40rem, 1fr)); gap: 1.5rem;"}
   ($variants | each {|v|
     (FIGURE {style: "margin: 0; background: var(--primary-7); border: 1px solid var(--primary-7-dim); border-radius: var(--border-radius-2); overflow: hidden;"}
-    (IFRAME {srcdoc: (design-tile-html $v) title: $v style: "width: 100%; height: 26rem; border: 0; display: block;"})
+    (IFRAME {srcdoc: (design-tile-html $v --is-mac=$is_mac) title: $v style: "width: 100%; height: 26rem; border: 0; display: block;"})
     (FIGCAPTION {style: "padding: .5rem .75rem; font-family: var(--font-mono); font-size: var(--font-size--1); color: var(--primary-7-on); border-top: 1px solid var(--primary-7-dim);"} $v))
   }))))
 }
@@ -720,12 +748,13 @@ bootstrap-if-empty
   dispatch $req [
     (route {method: "GET" path: "/"} {|req ctx| index-page })
     (route {method: "GET" path: "/shots"} {|req ctx| shots-page })
-    (route {method: "GET" path: "/design"} {|req ctx| design-page })
+    (route {method: "GET" path: "/design"} {|req ctx| design-page --is-mac=(is-mac $req) })
 
     (route {method: "GET" path: "/updates"} {|req ctx|
+      let is_mac = is-mac $req
       .cat -f
       | projection project-stream
-      | each {|s| render-event $s }
+      | each {|s| render-event $s --is-mac=$is_mac }
       | to sse
     })
 
