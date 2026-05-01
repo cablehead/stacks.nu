@@ -374,6 +374,25 @@ assert equal $restored.hash "h1"
 assert equal $restored.position "a"
 print "   ok"
 
+print "5m2. restore bumps selection to the restored entity"
+let bump_clip = $trash_setup | append [
+    {topic: "stack.add" id: "ts2" hash: null meta: {name: "Other" sort: "auto"}}
+    {topic: "stack.select" id: "x" hash: null meta: {id: "ts2"}} # focus elsewhere
+    {topic: "clip.delete" id: "td1" hash: null meta: {id: "tc1"}}
+    {topic: "clip.restore" id: "tr1" hash: null meta: {target: "td1"}}
+  ] | projection project
+assert equal $bump_clip.selectedStackId "ts1"
+assert equal $bump_clip.selectedClipId "tc1"
+
+let bump_stack = $trash_setup | append [
+    {topic: "stack.add" id: "ts2" hash: null meta: {name: "Other" sort: "auto"}}
+    {topic: "stack.select" id: "x" hash: null meta: {id: "ts2"}}
+    {topic: "stack.delete" id: "tsd1" hash: null meta: {id: "ts1"}}
+    {topic: "stack.restore" id: "tsr1" hash: null meta: {target: "tsd1"}}
+  ] | projection project
+assert equal $bump_stack.selectedStackId "ts1"
+print "   ok"
+
 print "5n. stack.delete captures snapshot incl. clips; stack.restore brings the whole thing back"
 let after_sdel = $trash_setup | append [
     {topic: "stack.delete" id: "tsd1" hash: null meta: {id: "ts1"}}

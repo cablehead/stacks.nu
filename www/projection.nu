@@ -329,7 +329,15 @@ def clip-restore [state: record frame: record] {
       } else { $s }
     }
   let deleted = $state.deleted | where frame_id != $target
-  $state | update stacks $stacks | update deleted $deleted
+  # Bump selection to the restored clip so the user sees what came back. On
+  # cold replay, later clip.select / stack.select frames will override; live,
+  # this is the most-recent action so it sticks.
+  $state
+  | update stacks $stacks
+  | update deleted $deleted
+  | update selectedStackId $stack_id
+  | update selectedClipId $clip.id
+  | update selectionExplicit true
 }
 
 def stack-restore [state: record frame: record] {
@@ -340,7 +348,13 @@ def stack-restore [state: record frame: record] {
   let stack = $entry.snapshot.stack
   let stacks = $state.stacks | append $stack
   let deleted = $state.deleted | where frame_id != $target
-  $state | update stacks $stacks | update deleted $deleted
+  # Bump selection to the restored stack -- reconcile will pick a clip from
+  # it via render order / clipCursors memory.
+  $state
+  | update stacks $stacks
+  | update deleted $deleted
+  | update selectedStackId $stack.id
+  | update selectionExplicit true
 }
 
 def deleted-select [state: record frame: record] {
