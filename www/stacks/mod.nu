@@ -51,6 +51,15 @@ export def "stack delete" [id: string]: nothing -> record {
   {topic: "stack.delete" ttl: "forever" meta: {id: $id}}
 }
 
+# Restore a previously-deleted stack (with its clips). `target` is the id of
+# the original `stack.delete` frame.
+@example "Restore the stack whose deletion is recorded by frame f1" {
+  stack restore "f1"
+} --result {topic: "stack.restore" ttl: "forever" meta: {target: "f1"}}
+export def "stack restore" [target: string]: nothing -> record {
+  {topic: "stack.restore" ttl: "forever" meta: {target: $target}}
+}
+
 # Selection: id wins over --down/--up. At least one must be supplied.
 @example "Select a specific stack by id" {
   stack select "s1"
@@ -111,6 +120,15 @@ export def "clip move" [
 } --result {topic: "clip.delete" ttl: "forever" meta: {id: "c1"}}
 export def "clip delete" [id: string]: nothing -> record {
   {topic: "clip.delete" ttl: "forever" meta: {id: $id}}
+}
+
+# Restore a previously-deleted clip. `target` is the id of the original
+# `clip.delete` frame, which is what state.deleted entries key off.
+@example "Restore the clip whose deletion is recorded by frame f1" {
+  clip restore "f1"
+} --result {topic: "clip.restore" ttl: "forever" meta: {target: "f1"}}
+export def "clip restore" [target: string]: nothing -> record {
+  {topic: "clip.restore" ttl: "forever" meta: {target: $target}}
 }
 
 @example "Cycle to the previous clip" {

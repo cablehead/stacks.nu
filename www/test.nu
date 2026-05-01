@@ -510,6 +510,12 @@ assert equal $e2 ({topic: "clip.patch" ttl: "forever" meta: {id: "c1" position: 
 let f = clip delete "c1"
 assert equal $f ({topic: "clip.delete" ttl: "forever" meta: {id: "c1"}})
 
+let r1 = clip restore "f1"
+assert equal $r1 ({topic: "clip.restore" ttl: "forever" meta: {target: "f1"}})
+
+let r2 = stack restore "f1"
+assert equal $r2 ({topic: "stack.restore" ttl: "forever" meta: {target: "f1"}})
+
 let g = stack select "s1"
 assert equal $g ({topic: "stack.select" ttl: "ephemeral" meta: {id: "s1"}})
 
