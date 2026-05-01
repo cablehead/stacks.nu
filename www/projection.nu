@@ -47,7 +47,7 @@ export def empty []: nothing -> record {
 # `ids`. Falls back to the last remaining id when the removed one was the
 # bottom, and null when nothing remains. Used by stack/clip delete to keep
 # the cursor under the user's eye.
-def slot-after-removal [ids: list, removed: any]: nothing -> any {
+def slot-after-removal [ids: list removed: any]: nothing -> any {
   let idx = $ids | enumerate | where item == $removed | get index.0?
   let post = $ids | where {|x| $x != $removed }
   if $idx == null or ($post | is-empty) {
@@ -61,7 +61,7 @@ def slot-after-removal [ids: list, removed: any]: nothing -> any {
 
 export def sorted-clips [stack: record]: nothing -> list {
   if $stack.sort == "manual" {
-    $stack.clips | sort-by {|c| [($c.position? | default "") $c.id]}
+    $stack.clips | sort-by {|c| [($c.position? | default "") $c.id] }
   } else {
     $stack.clips | sort-by lastTouched | reverse
   }
@@ -76,7 +76,7 @@ def remember-cursor [state: record]: nothing -> record {
   } else { $state }
 }
 
-export def apply-frame [state: record, frame: record]: nothing -> record {
+export def apply-frame [state: record frame: record]: nothing -> record {
   let s = match $frame.topic {
     "stack.add" => (stack-add $state $frame)
     "stack.update" => (stack-update $state $frame)
@@ -140,7 +140,7 @@ export def reconcile-selection []: record -> record {
   $state | update selectedStackId $sel_stack | update selectedClipId $sel_clip
 }
 
-def stack-add [state: record, frame: record] {
+def stack-add [state: record frame: record] {
   let stack = {
     id: $frame.id
     name: ($frame.meta?.name? | default "Untitled")
@@ -151,16 +151,16 @@ def stack-add [state: record, frame: record] {
   $state | update stacks ($state.stacks | append $stack)
 }
 
-def stack-update [state: record, frame: record] {
+def stack-update [state: record frame: record] {
   let id = $frame.meta.id
   let patch = $frame.meta | reject id
   let stacks = $state.stacks | each {|s|
-    if $s.id == $id { $s | merge $patch | update lastTouched $frame.id } else { $s }
-  }
+      if $s.id == $id { $s | merge $patch | update lastTouched $frame.id } else { $s }
+    }
   $state | update stacks $stacks
 }
 
-def stack-delete [state: record, frame: record] {
+def stack-delete [state: record frame: record] {
   let id = $frame.meta.id
   let victim = $state.stacks | where id == $id | get -i 0
   let stacks = $state.stacks | where id != $id
@@ -195,14 +195,14 @@ def stack-delete [state: record, frame: record] {
     [{frame_id: $frame.id kind: "stack" snapshot: {stack: $victim} deleted_at: $frame.id}] | append $state.deleted
   }
   $state
-    | update stacks $stacks
-    | update selectedStackId $new_selected
-    | update selectedClipId $new_clip
-    | update clipCursors $cursors
-    | update deleted $deleted
+  | update stacks $stacks
+  | update selectedStackId $new_selected
+  | update selectedClipId $new_clip
+  | update clipCursors $cursors
+  | update deleted $deleted
 }
 
-def clip-add [state: record, frame: record] {
+def clip-add [state: record frame: record] {
   let stack_id = $frame.meta.stack_id
   let clip = {
     id: $frame.id
@@ -213,12 +213,12 @@ def clip-add [state: record, frame: record] {
     versions: [$frame.id]
   }
   let stacks = $state.stacks | each {|s|
-    if $s.id == $stack_id {
-      $s | update clips ($s.clips | append $clip) | update lastTouched $frame.id
-    } else {
-      $s
+      if $s.id == $stack_id {
+        $s | update clips ($s.clips | append $clip) | update lastTouched $frame.id
+      } else {
+        $s
+      }
     }
-  }
   # In auto-sort stacks, a new clip is the new top -- bump selection to it
   # when it lands in the currently-selected stack.
   let target = $stacks | where id == $stack_id | get -i 0
@@ -230,24 +230,24 @@ def clip-add [state: record, frame: record] {
   }
 }
 
-def clip-update [state: record, frame: record] {
+def clip-update [state: record frame: record] {
   let clip_id = $frame.meta.id
   let new_hash = $frame.hash?
   let stacks = $state.stacks | each {|s|
-    if ($s.clips | any {|c| $c.id == $clip_id }) {
-      let updated_clips = $s.clips | each {|c|
-        if $c.id == $clip_id {
-          $c
-            | update hash $new_hash
-            | update lastTouched $frame.id
-            | update versions ([$frame.id] | append $c.versions)
-        } else { $c }
+      if ($s.clips | any {|c| $c.id == $clip_id }) {
+        let updated_clips = $s.clips | each {|c|
+            if $c.id == $clip_id {
+              $c
+              | update hash $new_hash
+              | update lastTouched $frame.id
+              | update versions ([$frame.id] | append $c.versions)
+            } else { $c }
+          }
+        $s | update clips $updated_clips | update lastTouched $frame.id
+      } else {
+        $s
       }
-      $s | update clips $updated_clips | update lastTouched $frame.id
-    } else {
-      $s
     }
-  }
   $state | update stacks $stacks
 }
 
@@ -256,7 +256,7 @@ def clip-update [state: record, frame: record] {
 # directly. lastTouched only bumps for structural changes (move or position
 # update), not for pure metadata patches like mime_type -- those are a
 # re-classification, not activity.
-def clip-patch [state: record, frame: record] {
+def clip-patch [state: record frame: record] {
   let clip_id = $frame.meta.id
   let patch = $frame.meta | reject id
 
@@ -274,22 +274,22 @@ def clip-patch [state: record, frame: record] {
   let bump = ($target_id != $current.id) or (($patch.position?) != null)
 
   let stacks = $state.stacks | each {|s|
-    let stripped = $s | update clips ($s.clips | where id != $clip_id)
-    let was_source = ($s.id == $current.id)
-    let is_target = ($s.id == $target_id)
-    if $is_target {
-      let next = $stripped | update clips ($stripped.clips | append $patched)
-      if $bump { $next | update lastTouched $frame.id } else { $next }
-    } else if $was_source {
-      if $bump { $stripped | update lastTouched $frame.id } else { $stripped }
-    } else {
-      $stripped
+      let stripped = $s | update clips ($s.clips | where id != $clip_id)
+      let was_source = ($s.id == $current.id)
+      let is_target = ($s.id == $target_id)
+      if $is_target {
+        let next = $stripped | update clips ($stripped.clips | append $patched)
+        if $bump { $next | update lastTouched $frame.id } else { $next }
+      } else if $was_source {
+        if $bump { $stripped | update lastTouched $frame.id } else { $stripped }
+      } else {
+        $stripped
+      }
     }
-  }
   $state | update stacks $stacks
 }
 
-def clip-delete [state: record, frame: record] {
+def clip-delete [state: record frame: record] {
   let clip_id = $frame.meta.id
   let owner = $state.stacks
     | where ($it.clips | any {|c| $c.id == $clip_id })
@@ -297,9 +297,9 @@ def clip-delete [state: record, frame: record] {
   let owner_id = $owner | get -i id
   let victim = if $owner == null { null } else { $owner.clips | where id == $clip_id | first }
   let stacks = $state.stacks | each {|s|
-    let cleaned = $s | update clips ($s.clips | where id != $clip_id)
-    if $s.id == $owner_id { $cleaned | update lastTouched $frame.id } else { $cleaned }
-  }
+      let cleaned = $s | update clips ($s.clips | where id != $clip_id)
+      if $s.id == $owner_id { $cleaned | update lastTouched $frame.id } else { $cleaned }
+    }
   let new_selected = if $owner == null or $state.selectedClipId != $clip_id {
     $state.selectedClipId
   } else {
@@ -314,7 +314,7 @@ def clip-delete [state: record, frame: record] {
 # Restore a previously-deleted clip. frame.meta.target points at the
 # clip.delete frame's id; we read the snapshot out of state.deleted and
 # splice the clip back into its original stack.
-def clip-restore [state: record, frame: record] {
+def clip-restore [state: record frame: record] {
   let target = $frame.meta?.target?
   if $target == null { return $state }
   let entry = $state.deleted | where frame_id == $target | get -i 0
@@ -324,15 +324,15 @@ def clip-restore [state: record, frame: record] {
   if not $parent_alive { return $state }
   let clip = $entry.snapshot.clip
   let stacks = $state.stacks | each {|s|
-    if $s.id == $stack_id {
-      $s | update clips ($s.clips | append $clip)
-    } else { $s }
-  }
+      if $s.id == $stack_id {
+        $s | update clips ($s.clips | append $clip)
+      } else { $s }
+    }
   let deleted = $state.deleted | where frame_id != $target
   $state | update stacks $stacks | update deleted $deleted
 }
 
-def stack-restore [state: record, frame: record] {
+def stack-restore [state: record frame: record] {
   let target = $frame.meta?.target?
   if $target == null { return $state }
   let entry = $state.deleted | where frame_id == $target | get -i 0
@@ -343,7 +343,7 @@ def stack-restore [state: record, frame: record] {
   $state | update stacks $stacks | update deleted $deleted
 }
 
-def deleted-select [state: record, frame: record] {
+def deleted-select [state: record frame: record] {
   let ids = $state.deleted | get frame_id
   let new_id = if ($frame.meta?.id? != null) {
     if ($frame.meta.id in $ids) { $frame.meta.id } else { $state.selectedDeletedFrameId }
@@ -354,7 +354,7 @@ def deleted-select [state: record, frame: record] {
 }
 
 # Cycle by `action`, jump by `id`. "top" jumps to the first id in render order.
-def cycle [ids: list, current: any, action: string]: nothing -> any {
+def cycle [ids: list current: any action: string]: nothing -> any {
   if ($ids | is-empty) { return null }
   let n = $ids | length
   let idx = $ids | enumerate | where item == $current | get index.0?
@@ -367,7 +367,7 @@ def cycle [ids: list, current: any, action: string]: nothing -> any {
   }
 }
 
-def stack-select [state: record, frame: record] {
+def stack-select [state: record frame: record] {
   # Cycle in the same order the UI renders: most-recently-touched first.
   let stack_ids = $state.stacks | sort-by lastTouched | reverse | get id
   let new_id = if ($frame.meta?.id? != null) {
@@ -386,12 +386,12 @@ def stack-select [state: record, frame: record] {
     $clip_ids | get -i 0
   }
   $state
-    | update selectedStackId $new_id
-    | update selectedClipId $target_clip
-    | update selectionExplicit true
+  | update selectedStackId $new_id
+  | update selectedClipId $target_clip
+  | update selectionExplicit true
 }
 
-def clip-select [state: record, frame: record] {
+def clip-select [state: record frame: record] {
   let stack = $state.stacks | where id == $state.selectedStackId | get -i 0
   if $stack == null { return $state }
   let clip_ids = sorted-clips $stack | get id
@@ -405,13 +405,13 @@ def clip-select [state: record, frame: record] {
 
 # Fold a list of frames into final state, with selection reconciled. Pure.
 export def project []: list -> record {
-  reduce -f (empty) {|frame, acc| apply-frame $acc $frame } | reconcile-selection
+  reduce -f (empty) {|frame acc| apply-frame $acc $frame } | reconcile-selection
 }
 
 # Streaming projection. Buffers silently until xs.threshold; emits the state
 # at threshold (with default selection applied) and on every subsequent frame.
 export def project-stream []: any -> any {
-  generate {|frame, state|
+  generate {|frame state|
     if $frame.topic == "xs.threshold" {
       let reconciled = $state.value | reconcile-selection
       let next = {value: $reconciled live: true}

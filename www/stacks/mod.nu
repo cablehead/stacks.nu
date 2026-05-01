@@ -15,9 +15,9 @@
 def merge-some [opts: record]: record -> record {
   let base = $in
   $opts
-  | items {|k, v| {key: $k value: $v}}
+  | items {|k v| {key: $k value: $v} }
   | where value != null
-  | reduce -f $base {|it, acc| $acc | upsert $it.key $it.value}
+  | reduce -f $base {|it acc| $acc | upsert $it.key $it.value }
 }
 
 # --- stacks ------------------------------------------------------------------
@@ -27,7 +27,7 @@ def merge-some [opts: record]: record -> record {
 } --result {topic: "stack.add" ttl: "forever" meta: {name: "Inbox" sort: "manual"}}
 export def "stack add" [
   name: string
-  --sort: string = "auto"   # "auto" | "manual"
+  --sort: string = "auto" # "auto" | "manual"
 ]: nothing -> record {
   {topic: "stack.add" ttl: "forever" meta: {name: $name sort: $sort}}
 }
@@ -38,7 +38,7 @@ export def "stack add" [
 export def "stack update" [
   id: string
   --name: string
-  --sort: string             # "auto" | "manual"
+  --sort: string # "auto" | "manual"
 ]: nothing -> record {
   let meta = {id: $id} | merge-some {name: $name sort: $sort}
   {topic: "stack.update" ttl: "forever" meta: $meta}
@@ -69,7 +69,6 @@ export def "stack select" [
 
 # --- clips -------------------------------------------------------------------
 
-
 # Body bytes (piped in) become the clip's content; xs CAS-stores them.
 @example "Add a clip to a stack" {
   "hello" | clip add "s2" --mime-type "text/plain" --position "am"
@@ -80,7 +79,7 @@ export def "stack select" [
 export def "clip add" [
   stack_id: string
   --mime-type: string = "text/plain"
-  --position: string         # fractional index; only honored when stack sort=manual
+  --position: string # fractional index; only honored when stack sort=manual
 ]: any -> record {
   let body = $in
   let meta = {stack_id: $stack_id mime_type: $mime_type} | merge-some {position: $position}

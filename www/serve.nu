@@ -32,13 +32,13 @@ def hydrate-clip [clip: record]: nothing -> record {
 # Apple-symbol display for special keys; letters stay as-is. Used by the
 # status bar; keys.js doesn't see this -- it operates on the `combo` string.
 const KEY_GLYPH = {
-  "Cmd": "\u{2318}"      # ⌘
-  "Ctrl": "\u{2303}"     # ⌃
-  "Alt": "\u{2325}"      # ⌥
-  "Shift": "\u{21E7}"    # ⇧
-  "Enter": "\u{21B5}"    # ↵
-  "Esc": "ESC"           # the text "ESC", matching ~/stacks's convention
-  "Del": "DEL"           # covers both Delete and Backspace
+  "Cmd": "\u{2318}" # ⌘
+  "Ctrl": "\u{2303}" # ⌃
+  "Alt": "\u{2325}" # ⌥
+  "Shift": "\u{21E7}" # ⇧
+  "Enter": "\u{21B5}" # ↵
+  "Esc": "ESC" # the text "ESC", matching ~/stacks's convention
+  "Del": "DEL" # covers both Delete and Backspace
 }
 
 def glyphs [keys: list<string>]: nothing -> list<string> {
@@ -82,7 +82,7 @@ def js-fetch [
 # Impulse: fire-and-forget signal to the projection. The server validates
 # topic against IMPULSE_TOPICS; meta is the frame's meta. For ephemeral nav
 # events only -- not persistent mutations (those keep dedicated REST routes).
-def js-impulse [topic: string, meta: record]: nothing -> string {
+def js-impulse [topic: string meta: record]: nothing -> string {
   $"window.actions.impulse\(($topic | to json -r), ($meta | to json -r)\)"
 }
 
@@ -107,25 +107,25 @@ const IMPULSE_TOPICS = [
 # buttons) reference actions by id; both invoke window.actions.invoke(id),
 # which evaluates the JS. This decouples WHAT (action) from HOW IT'S TRIGGERED
 # (key, click).
-def actions-for [mode: string, ctx: record]: nothing -> record {
+def actions-for [mode: string ctx: record]: nothing -> record {
   match $mode {
     "compose" => {
-      "compose.save":   (js-fetch $"/compose/submit/($ctx.composeStackId)" --body "document.querySelector('#compose-text').value")
+      "compose.save": (js-fetch $"/compose/submit/($ctx.composeStackId)" --body "document.querySelector('#compose-text').value")
       "compose.cancel": (js-impulse "compose.close" {})
     }
     "edit" => {
-      "edit.save":   (js-fetch $"/editor/submit/($ctx.editClipId)" --body "document.querySelector('#compose-text').value")
+      "edit.save": (js-fetch $"/editor/submit/($ctx.editClipId)" --body "document.querySelector('#compose-text').value")
       "edit.cancel": (js-impulse "editor.close" {})
     }
     "rename" => {
-      "rename.save":   (js-fetch $"/stacks/($ctx.renameStackId)/rename/submit" --body "document.querySelector('#rename-text').value")
+      "rename.save": (js-fetch $"/stacks/($ctx.renameStackId)/rename/submit" --body "document.querySelector('#rename-text').value")
       "rename.cancel": (js-impulse "rename.close" {})
     }
     "actions" => (actions-main $ctx | upsert "actions.cancel" (js-impulse "actions.close" {}))
     "set-mime" => {
-      "set-mime.plain":    (js-fetch $"/clips/($ctx.setMimeClipId)" --method PATCH --json {mime_type: "text/plain"}    --then (js-impulse "set-mime.close" {}))
+      "set-mime.plain": (js-fetch $"/clips/($ctx.setMimeClipId)" --method PATCH --json {mime_type: "text/plain"} --then (js-impulse "set-mime.close" {}))
       "set-mime.markdown": (js-fetch $"/clips/($ctx.setMimeClipId)" --method PATCH --json {mime_type: "text/markdown"} --then (js-impulse "set-mime.close" {}))
-      "set-mime.cancel":   (js-impulse "set-mime.close" {})
+      "set-mime.cancel": (js-impulse "set-mime.close" {})
     }
     _ => (actions-main $ctx)
   }
@@ -135,16 +135,16 @@ def actions-for [mode: string, ctx: record]: nothing -> record {
 # overlaid on main; clicking a row should be able to invoke any main action).
 def actions-main [ctx: record]: nothing -> record {
   let core = {
-    "clip.next":  (js-impulse "clip.select"  {action: "down"})
-    "clip.prev":  (js-impulse "clip.select"  {action: "up"})
-    "clip.top":   (js-impulse "clip.select"  {action: "top"})
+    "clip.next": (js-impulse "clip.select" {action: "down"})
+    "clip.prev": (js-impulse "clip.select" {action: "up"})
+    "clip.top": (js-impulse "clip.select" {action: "top"})
     "stack.next": (js-impulse "stack.select" {action: "down"})
     "stack.prev": (js-impulse "stack.select" {action: "up"})
-    "stack.top":  (js-impulse "stack.select" {action: "top"})
+    "stack.top": (js-impulse "stack.select" {action: "top"})
     # Client computes the name at fire-time so the timestamp is in the
     # viewer's local tz, then never changes. ISO-ish 'sv-SE' formats as
     # YYYY-MM-DD HH:MM:SS; we trim to minutes.
-    "stack.new":  (js-fetch "/stacks/new" --body "new Date().toLocaleString('sv-SE').slice(0,16)")
+    "stack.new": (js-fetch "/stacks/new" --body "new Date().toLocaleString('sv-SE').slice(0,16)")
     "actions.open": (js-impulse "actions.open" {})
   }
   let with_n = if $ctx.selectedStackId != null {
@@ -152,8 +152,8 @@ def actions-main [ctx: record]: nothing -> record {
   } else { $core }
   let with_e = if $ctx.selectedClipId != null {
     $with_n
-    | upsert "clip.edit"     (js-impulse "editor.open" {clip_id: $ctx.selectedClipId})
-    | upsert "clip.delete"   (js-fetch $"/clips/($ctx.selectedClipId)" --method DELETE)
+    | upsert "clip.edit" (js-impulse "editor.open" {clip_id: $ctx.selectedClipId})
+    | upsert "clip.delete" (js-fetch $"/clips/($ctx.selectedClipId)" --method DELETE)
     | upsert "clip.set-mime" (js-impulse "set-mime.open" {clip_id: $ctx.selectedClipId})
   } else { $with_n }
   if $ctx.selectedStack != null {
@@ -168,12 +168,12 @@ def actions-main [ctx: record]: nothing -> record {
 
 # Keyboard triggers: combo -> action id. Same combo normalization as keys.js
 # (`cmd+ctrl+alt+shift+key`, letters lowercased).
-def keymap-for [mode: string, ctx: record]: nothing -> record {
+def keymap-for [mode: string ctx: record]: nothing -> record {
   match $mode {
-    "compose" => {"cmd+enter": "compose.save", "escape": "compose.cancel"}
-    "edit" => {"cmd+enter": "edit.save", "escape": "edit.cancel"}
-    "rename" => {"enter": "rename.save", "cmd+enter": "rename.save", "escape": "rename.cancel"}
-    "actions" => {"escape": "actions.cancel", "cmd+k": "actions.cancel"}
+    "compose" => {"cmd+enter": "compose.save" "escape": "compose.cancel"}
+    "edit" => {"cmd+enter": "edit.save" "escape": "edit.cancel"}
+    "rename" => {"enter": "rename.save" "cmd+enter": "rename.save" "escape": "rename.cancel"}
+    "actions" => {"escape": "actions.cancel" "cmd+k": "actions.cancel"}
     "set-mime" => {"escape": "set-mime.cancel"}
     _ => (keymap-main $ctx)
   }
@@ -181,11 +181,15 @@ def keymap-for [mode: string, ctx: record]: nothing -> record {
 
 def keymap-main [ctx: record]: nothing -> record {
   let base = {
-    "j": "clip.next", "k": "clip.prev"
-    "ctrl+n": "clip.next", "ctrl+p": "clip.prev"
+    "j": "clip.next"
+    "k": "clip.prev"
+    "ctrl+n": "clip.next"
+    "ctrl+p": "clip.prev"
     "0": "clip.top"
-    "shift+j": "stack.next", "shift+k": "stack.prev"
-    "shift+0": "stack.top", "shift+)": "stack.top"
+    "shift+j": "stack.next"
+    "shift+k": "stack.prev"
+    "shift+0": "stack.top"
+    "shift+)": "stack.top"
     "shift+n": "stack.new"
     "cmd+k": "actions.open"
   }
@@ -193,30 +197,30 @@ def keymap-main [ctx: record]: nothing -> record {
     $base
     | upsert "n" "clip.new"
     | upsert "r" "stack.rename"
-    | upsert "shift+delete"    "stack.delete"
+    | upsert "shift+delete" "stack.delete"
     | upsert "shift+backspace" "stack.delete"
   } else { $base }
   if $ctx.selectedClipId != null {
     $with_stack
     | upsert "e" "clip.edit"
-    | upsert "delete"    "clip.delete"
+    | upsert "delete" "clip.delete"
     | upsert "backspace" "clip.delete"
   } else { $with_stack }
 }
 
 # Status bar (right side): visible bindings, each referencing an action id.
-def bindings-for [mode: string, ctx: record]: nothing -> list {
+def bindings-for [mode: string ctx: record]: nothing -> list {
   match $mode {
     "compose" => [
-      {action: "compose.save"   label: "save"   keys: (glyphs [Cmd Enter])}
+      {action: "compose.save" label: "save" keys: (glyphs [Cmd Enter])}
       {action: "compose.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
     "edit" => [
-      {action: "edit.save"   label: "save"   keys: (glyphs [Cmd Enter])}
+      {action: "edit.save" label: "save" keys: (glyphs [Cmd Enter])}
       {action: "edit.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
     "rename" => [
-      {action: "rename.save"   label: "save"   keys: (glyphs [Enter])}
+      {action: "rename.save" label: "save" keys: (glyphs [Enter])}
       {action: "rename.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
     "actions" => [
@@ -226,11 +230,11 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
       {action: "set-mime.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
     _ => [
-      {action: "clip.next"    label: "next clip"  keys: (glyphs [J])}
-      {action: "clip.prev"    label: "prev clip"  keys: (glyphs [K])}
-      {action: "stack.next"   label: "next stack" keys: (glyphs [Shift J])}
-      {action: "stack.prev"   label: "prev stack" keys: (glyphs [Shift K])}
-      {action: "actions.open" label: "actions"    keys: (glyphs [Cmd K])}
+      {action: "clip.next" label: "next clip" keys: (glyphs [J])}
+      {action: "clip.prev" label: "prev clip" keys: (glyphs [K])}
+      {action: "stack.next" label: "next stack" keys: (glyphs [Shift J])}
+      {action: "stack.prev" label: "prev stack" keys: (glyphs [Shift K])}
+      {action: "actions.open" label: "actions" keys: (glyphs [Cmd K])}
     ]
   }
 }
@@ -238,31 +242,31 @@ def bindings-for [mode: string, ctx: record]: nothing -> list {
 # Action panel (Cmd+K): flat list, ordered clip-then-stack. Each row's
 # `require` field gates visibility against the current selection (~/stacks's
 # canApply pattern). Returns the rows that should appear given ctx.
-def panel-actions-for [mode: string, ctx: record]: nothing -> list {
+def panel-actions-for [mode: string ctx: record]: nothing -> list {
   if $mode == "set-mime" {
     return [
-      {action: "set-mime.plain"    label: "Plain text" keys: [] target: "mime" require: "always" groupStart: false}
-      {action: "set-mime.markdown" label: "Markdown"   keys: [] target: "mime" require: "always" groupStart: false}
+      {action: "set-mime.plain" label: "Plain text" keys: [] target: "mime" require: "always" groupStart: false}
+      {action: "set-mime.markdown" label: "Markdown" keys: [] target: "mime" require: "always" groupStart: false}
     ]
   }
   let items = [
-    {action: "clip.new"          label: "New clip"          keys: (glyphs [N])         target: "clip"  require: "stack"}
-    {action: "clip.edit"         label: "Edit clip"         keys: (glyphs [E])         target: "clip"  require: "clip"}
-    {action: "clip.set-mime"     label: "Set content type"  keys: []                   target: "clip"  require: "clip"}
-    {action: "clip.delete"       label: "Delete clip"       keys: (glyphs [Del])       target: "clip"  require: "clip"}
-    {action: "stack.new"         label: "New stack"    keys: (glyphs [Shift N])   target: "stack" require: "always"}
-    {action: "stack.rename"      label: "Rename stack" keys: (glyphs [R])         target: "stack" require: "stack"}
-    {action: "stack.sort.toggle" label: "Toggle sort"  keys: []                   target: "stack" require: "stack"}
-    {action: "stack.delete"      label: "Delete stack" keys: (glyphs [Shift Del]) target: "stack" require: "stack"}
+    {action: "clip.new" label: "New clip" keys: (glyphs [N]) target: "clip" require: "stack"}
+    {action: "clip.edit" label: "Edit clip" keys: (glyphs [E]) target: "clip" require: "clip"}
+    {action: "clip.set-mime" label: "Set content type" keys: [] target: "clip" require: "clip"}
+    {action: "clip.delete" label: "Delete clip" keys: (glyphs [Del]) target: "clip" require: "clip"}
+    {action: "stack.new" label: "New stack" keys: (glyphs [Shift N]) target: "stack" require: "always"}
+    {action: "stack.rename" label: "Rename stack" keys: (glyphs [R]) target: "stack" require: "stack"}
+    {action: "stack.sort.toggle" label: "Toggle sort" keys: [] target: "stack" require: "stack"}
+    {action: "stack.delete" label: "Delete stack" keys: (glyphs [Shift Del]) target: "stack" require: "stack"}
   ]
   let visible = $items | where {|x|
-    match $x.require {
-      "always" => true
-      "stack"  => ($ctx.selectedStackId != null)
-      "clip"   => ($ctx.selectedClipId != null)
-      _ => false
+      match $x.require {
+        "always" => true
+        "stack" => ($ctx.selectedStackId != null)
+        "clip" => ($ctx.selectedClipId != null)
+        _ => false
+      }
     }
-  }
   # Mark each row that starts a new target group so the template can insert
   # a divider before it. The first row never gets the flag.
   $visible | enumerate | each {|e|
@@ -273,7 +277,7 @@ def panel-actions-for [mode: string, ctx: record]: nothing -> list {
 
 # Status bar (left side): stack-related affordances, each referencing an
 # action id. Empty list when there's no useful target.
-def stack-actions-for [mode: string, ctx: record]: nothing -> list {
+def stack-actions-for [mode: string ctx: record]: nothing -> list {
   if $mode != "main" { return [] }
   let stack = $ctx.selectedStack
   if $stack == null { return [] }
@@ -287,7 +291,7 @@ def stack-actions-for [mode: string, ctx: record]: nothing -> list {
 
 # What goes on the LEFT of the status bar -- the stack name in main mode,
 # the modal title elsewhere.
-def mode-name-for [mode: string, ctx: record]: nothing -> string {
+def mode-name-for [mode: string ctx: record]: nothing -> string {
   match $mode {
     "compose" => $"New clip in ($ctx.composeStackName)"
     "edit" => $"Edit clip in ($ctx.editStackName)"
@@ -301,7 +305,7 @@ def mode-name-for [mode: string, ctx: record]: nothing -> string {
 }
 
 # Locate a clip across all stacks; returns {clip, stackName} or null.
-def find-clip [state: record, clip_id: any]: nothing -> any {
+def find-clip [state: record clip_id: any]: nothing -> any {
   if $clip_id == null { return null }
   for s in $state.stacks {
     let hit = $s.clips | where id == $clip_id | get -i 0
@@ -374,17 +378,27 @@ def render-event [state: record]: nothing -> record {
 # hand-rolled so we can vary the mode without driving a live store.
 def design-state [variant: string]: nothing -> record {
   let stacks = [
-    {id: "s1" name: "Inbox"    sort: "auto"   lastTouched: "f3"
+    {
+      id: "s1"
+      name: "Inbox"
+      sort: "auto"
+      lastTouched: "f3"
       clips: [
         {id: "c1" hash: "fake-h1" mime_type: "text/plain" position: null lastTouched: "c1" versions: ["c1"]}
         {id: "c2" hash: "fake-h2" mime_type: "text/plain" position: null lastTouched: "c2" versions: ["c2"]}
-      ]}
-    {id: "s2" name: "Snippets" sort: "manual" lastTouched: "c4"
+      ]
+    }
+    {
+      id: "s2"
+      name: "Snippets"
+      sort: "manual"
+      lastTouched: "c4"
       clips: [
         {id: "c3" hash: "fake-h3" mime_type: "text/plain" position: "a" lastTouched: "c3" versions: ["c3"]}
         {id: "c4" hash: "fake-h4" mime_type: "text/plain" position: "b" lastTouched: "c4" versions: ["c4"]}
-      ]}
-    {id: "s3" name: "Untitled" sort: "auto"   lastTouched: "s3" clips: []}
+      ]
+    }
+    {id: "s3" name: "Untitled" sort: "auto" lastTouched: "s3" clips: []}
   ]
   let base = projection empty
     | update stacks $stacks
@@ -392,13 +406,13 @@ def design-state [variant: string]: nothing -> record {
     | update selectedClipId "c1"
     | update selectionExplicit true
   match $variant {
-    "main"             => $base
+    "main" => $base
     "main-empty-stack" => ($base | update selectedStackId "s3" | update selectedClipId null)
-    "compose"          => ($base | update mode "compose" | update composeStackId "s1")
-    "edit"             => ($base | update mode "edit"    | update editClipId "c1")
-    "rename"           => ($base | update mode "rename"  | update renameStackId "s1")
-    "actions"          => ($base | update mode "actions")
-    "set-mime"         => ($base | update mode "set-mime" | update setMimeClipId "c1")
+    "compose" => ($base | update mode "compose" | update composeStackId "s1")
+    "edit" => ($base | update mode "edit" | update editClipId "c1")
+    "rename" => ($base | update mode "rename" | update renameStackId "s1")
+    "actions" => ($base | update mode "actions")
+    "set-mime" => ($base | update mode "set-mime" | update setMimeClipId "c1")
     _ => $base
   }
 }
@@ -422,32 +436,23 @@ def design-tile-html [variant: string]: nothing -> string {
 
 def design-page []: nothing -> any {
   let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions" "set-mime"]
-  (
-    HTML
-    (
-      HEAD
-      (META {charset: "utf-8"})
-      (TITLE "stacks.nu | design")
-      (LINK {rel: "stylesheet" href: "/stellar.css"})
-      (LINK {rel: "stylesheet" href: "/base.css"})
-      (SCRIPT-ICONIFY)
-    )
-    (
-      BODY {style: "padding: 1.5rem; background: var(--primary-6); color: var(--primary-6-on); font-family: var(--font-sans); margin: 0; height: 100vh; overflow: auto;"}
-      (H1 {style: "font-size: var(--font-size-2); margin: 0 0 .25rem;"} "stacks.nu | design")
-      (P {style: "color: var(--primary-7-dim); font-size: var(--font-size--1); margin: 0 0 1.5rem;"}
-        "Inert layout previews of every mode. Each tile is an iframe rendering the live template at a fixed state.")
-      (
-        DIV {style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(40rem, 1fr)); gap: 1.5rem;"}
-        ($variants | each {|v|
-          (FIGURE {style: "margin: 0; background: var(--primary-7); border: 1px solid var(--primary-7-dim); border-radius: var(--border-radius-2); overflow: hidden;"}
-            (IFRAME {srcdoc: (design-tile-html $v) title: $v style: "width: 100%; height: 26rem; border: 0; display: block;"})
-            (FIGCAPTION {style: "padding: .5rem .75rem; font-family: var(--font-mono); font-size: var(--font-size--1); color: var(--primary-7-on); border-top: 1px solid var(--primary-7-dim);"} $v)
-          )
-        })
-      )
-    )
-  )
+  (HTML
+  (HEAD
+  (META {charset: "utf-8"})
+  (TITLE "stacks.nu | design")
+  (LINK {rel: "stylesheet" href: "/stellar.css"})
+  (LINK {rel: "stylesheet" href: "/base.css"})
+  (SCRIPT-ICONIFY))
+  (BODY {style: "padding: 1.5rem; background: var(--primary-6); color: var(--primary-6-on); font-family: var(--font-sans); margin: 0; height: 100vh; overflow: auto;"}
+  (H1 {style: "font-size: var(--font-size-2); margin: 0 0 .25rem;"} "stacks.nu | design")
+  (P {style: "color: var(--primary-7-dim); font-size: var(--font-size--1); margin: 0 0 1.5rem;"}
+  "Inert layout previews of every mode. Each tile is an iframe rendering the live template at a fixed state.")
+  (DIV {style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(40rem, 1fr)); gap: 1.5rem;"}
+  ($variants | each {|v|
+    (FIGURE {style: "margin: 0; background: var(--primary-7); border: 1px solid var(--primary-7-dim); border-radius: var(--border-radius-2); overflow: hidden;"}
+    (IFRAME {srcdoc: (design-tile-html $v) title: $v style: "width: 100%; height: 26rem; border: 0; display: block;"})
+    (FIGCAPTION {style: "padding: .5rem .75rem; font-family: var(--font-mono); font-size: var(--font-size--1); color: var(--primary-7-on); border-top: 1px solid var(--primary-7-dim);"} $v))
+  }))))
 }
 
 def shots-page []: nothing -> any {
@@ -455,86 +460,70 @@ def shots-page []: nothing -> any {
   let files = if ($dir | path exists) {
     ls $dir | where ($it.name | str ends-with ".png") | get name | each {|p| $p | path basename } | sort
   } else { [] }
-  (
-    HTML
-    (
-      HEAD
-      (META {charset: "utf-8"})
-      (TITLE "stacks.nu | screenshots")
-      (LINK {rel: "stylesheet" href: "/stellar.css"})
-      (LINK {rel: "stylesheet" href: "/base.css"})
-    )
-    (
-      BODY {style: "padding: 1.5rem; background: var(--primary-6); color: var(--primary-6-on); font-family: var(--font-sans);"}
-      (H1 {style: "font-size: var(--font-size-2); margin: 0 0 1rem;"} "stacks.nu screenshots")
-      (P {style: "color: var(--primary-7-dim); font-size: var(--font-size--1); margin: 0 0 1.5rem;"}
-        $"($files | length) pose"
-        (if ($files | length) == 1 { "" } else { "s" })
-        " in "
-        (CODE "www/static/shots/")
-      )
-      (if ($files | is-empty) {
-        (P {style: "color: var(--primary-7-dim);"} "No shots yet. Run "
-          (CODE "scripts/shoot.py") " to bake some.")
-      } else {
-        (
-          DIV {style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1rem;"}
-          ($files | each {|f|
-            let slug = $f | str replace ".png" "" | str replace -a "-" " "
-            (FIGURE {style: "margin: 0; background: var(--primary-7); border: 1px solid var(--primary-7-dim); border-radius: var(--border-radius-2); overflow: hidden;"}
-              (IMG {src: $"/shots/($f)" alt: $slug style: "width: 100%; display: block;"})
-              (FIGCAPTION {style: "padding: .5rem .75rem; font-family: var(--font-mono); font-size: var(--font-size--1); color: var(--primary-7-on); border-top: 1px solid var(--primary-7-dim);"} $slug)
-            )
-          })
-        )
-      })
-    )
-  )
+  (HTML
+  (HEAD
+  (META {charset: "utf-8"})
+  (TITLE "stacks.nu | screenshots")
+  (LINK {rel: "stylesheet" href: "/stellar.css"})
+  (LINK {rel: "stylesheet" href: "/base.css"}))
+  (BODY {style: "padding: 1.5rem; background: var(--primary-6); color: var(--primary-6-on); font-family: var(--font-sans);"}
+  (H1 {style: "font-size: var(--font-size-2); margin: 0 0 1rem;"} "stacks.nu screenshots")
+  (P {style: "color: var(--primary-7-dim); font-size: var(--font-size--1); margin: 0 0 1.5rem;"}
+  $"($files | length) pose"
+  (if ($files | length) == 1 { "" } else { "s" })
+  " in "
+  (CODE "www/static/shots/"))
+  (if ($files | is-empty) {
+    (P {style: "color: var(--primary-7-dim);"} "No shots yet. Run "
+    (CODE "scripts/shoot.py") " to bake some.")
+  } else {
+    (DIV {style: "display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1rem;"}
+    ($files | each {|f|
+      let slug = $f | str replace ".png" "" | str replace -a "-" " "
+      (FIGURE {style: "margin: 0; background: var(--primary-7); border: 1px solid var(--primary-7-dim); border-radius: var(--border-radius-2); overflow: hidden;"}
+      (IMG {src: $"/shots/($f)" alt: $slug style: "width: 100%; display: block;"})
+      (FIGCAPTION {style: "padding: .5rem .75rem; font-family: var(--font-mono); font-size: var(--font-size--1); color: var(--primary-7-on); border-top: 1px solid var(--primary-7-dim);"} $slug))
+    }))
+  })))
 }
 
 def index-page []: nothing -> any {
-  (
-    HTML
-    (
-      HEAD
-      # Pre-paint theme apply -- runs synchronously before the stylesheet so
-      # there's no light->dark flash. localStorage wins; otherwise system pref.
-      (
-        SCRIPT {__html: "
+  (HTML
+  (HEAD
+  # Pre-paint theme apply -- runs synchronously before the stylesheet so
+  # there's no light->dark flash. localStorage wins; otherwise system pref.
+  (SCRIPT {
+    __html: "
 (function() {
   var saved = localStorage.getItem('theme');
   var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme:dark)').matches;
   if (dark) document.documentElement.classList.add('dark');
 })();
-"}
-      )
-      (META {charset: "utf-8"})
-      (META {name: "viewport" content: "width=device-width,initial-scale=1"})
-      (TITLE "stacks.nu")
-      (LINK {rel: "stylesheet" href: "/stellar.css"})
-      (LINK {rel: "stylesheet" href: "/base.css"})
-      (SCRIPT {type: "module" src: $DATASTAR_JS_PATH})
-      (SCRIPT-ICONIFY)
-      (SCRIPT {src: "/keys.js"})
-      (SCRIPT {src: "/action-panel.js"})
-      # Theme toggle handler. Lives at window.toggleTheme so the status-bar
-      # button can call it inline; persists choice and updates the icon.
-      (
-        SCRIPT {__html: "
+"
+  })
+  (META {charset: "utf-8"})
+  (META {name: "viewport" content: "width=device-width,initial-scale=1"})
+  (TITLE "stacks.nu")
+  (LINK {rel: "stylesheet" href: "/stellar.css"})
+  (LINK {rel: "stylesheet" href: "/base.css"})
+  (SCRIPT {type: "module" src: $DATASTAR_JS_PATH})
+  (SCRIPT-ICONIFY)
+  (SCRIPT {src: "/keys.js"})
+  (SCRIPT {src: "/action-panel.js"})
+  # Theme toggle handler. Lives at window.toggleTheme so the status-bar
+  # button can call it inline; persists choice and updates the icon.
+  (SCRIPT {
+    __html: "
 window.toggleTheme = function() {
   var isDark = document.documentElement.classList.toggle('dark');
   localStorage.setItem('theme', isDark ? 'dark' : 'light');
   var icon = document.querySelector('#theme-toggle iconify-icon');
   if (icon) icon.setAttribute('icon', isDark ? 'lucide:sun' : 'lucide:moon');
 };
-"}
-      )
-    )
-    (
-      BODY {data-init: "@get('/updates')"}
-      (MAIN "loading...")
-    )
-  )
+"
+  }))
+  (BODY {data-init: "@get('/updates')"}
+  (MAIN "loading...")))
 }
 
 # First-run seed: when the store has never had a stack, drop in two stacks
@@ -564,7 +553,7 @@ def bootstrap-if-empty []: nothing -> nothing {
 Press \"Shift+DEL\" to delete this whole stack. Click OK to confirm.
 
 Your cursor will preserve and bounce you back to where you left off in Tutorial."
-    | .append clip.add --meta {stack_id: $side.id mime_type: "text/plain"} | ignore
+  | .append clip.add --meta {stack_id: $side.id mime_type: "text/plain"} | ignore
 
   # ---- Tutorial ----
   let tut = .append stack.add --meta {name: "Tutorial" sort: "auto"}
@@ -585,7 +574,7 @@ There's more in the actions panel:
 The icon on the far right of the status bar toggles light / dark.
 
 When you're ready to start for real, \"Shift+DEL\" removes this whole stack."
-    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
+  | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 
   # Step 4 -- continuation after returning from the side quest.
   "Welcome back. Your cursor preserved its position -- and the side quest stack is gone.
@@ -593,19 +582,19 @@ When you're ready to start for real, \"Shift+DEL\" removes this whole stack."
 Press \"Cmd+k\" to open the actions panel. Type to filter, arrows to navigate, Enter (or click) to fire, Esc to close.
 
 When you're done, press \"j\" to continue."
-    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
+  | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 
   # Step 3 -- side quest hand-off. Re-read after return tells you to press "j".
   "Side quest: press \"Shift+j\" to switch to the next stack.
 
 When you come back, press \"j\" to continue."
-    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
+  | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 
   # Step 2 -- press DEL; cursor preservation lands you on what was step 3.
   "Press DEL to delete this clip.
 
 Your cursor stays in the same slot, so you'll land on the next clip down."
-    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
+  | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 
   # Step 1 -- nav refresher.
   "\"j\" goes to the next clip; \"k\" goes to the previous one.
@@ -613,7 +602,7 @@ Your cursor stays in the same slot, so you'll land on the next clip down."
 \"Shift+j\" / \"Shift+k\" cycle stacks (the list on the left).
 
 Press \"j\" again."
-    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
+  | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 
   # Step 0 -- top; the user's first view.
   "Welcome to stacks.nu.
@@ -621,7 +610,7 @@ Press \"j\" again."
 The status bar at the bottom shows your keys.
 
 Press \"j\" to move to the next clip."
-    | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
+  | .append clip.add --meta {stack_id: $tut.id mime_type: "text/plain"} | ignore
 }
 
 bootstrap-if-empty
@@ -732,7 +721,7 @@ bootstrap-if-empty
       # re-classifies. Validate mime_type against the small allowlist; pass
       # the rest through.
       let body = $in | from json
-      let mime_ok = ["text/plain", "text/markdown"]
+      let mime_ok = ["text/plain" "text/markdown"]
       if "mime_type" in ($body | columns) and not ($body.mime_type in $mime_ok) {
         return ("invalid mime_type" | metadata set { merge {'http.response': {status: 400}} })
       }
