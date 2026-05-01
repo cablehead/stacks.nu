@@ -836,14 +836,27 @@ bootstrap-if-empty
     # ---- trash ----
     # Restore a deleted entity. The path id is the original delete frame's id;
     # we look it up to dispatch on whether it was a clip or stack delete, then
-    # emit the matching restore topic.
+    # emit the matching restore topic. For clip restores we project current
+    # state and refuse when the parent stack is itself in trash -- the
+    # projection would silently no-op, leaving the user wondering.
     (route {method: "POST" path-matches: "/trash/restore/:frame_id"} {|req ctx|
       let frame = .get $ctx.frame_id
       if $frame == null {
         return ("Not Found" | metadata set { merge {'http.response': {status: 404}} })
       }
       match $frame.topic {
-        "clip.delete" => { .append clip.restore --meta {target: $ctx.frame_id} | ignore }
+        "clip.delete" => {
+          let state = .cat | projection project
+          let entry = $state.deleted | where frame_id == $ctx.frame_id | get -i 0
+          if $entry == null {
+            return ("clip already restored" | metadata set { merge {'http.response': {status: 409}} })
+          }
+          let parent_alive = ($state.stacks | any {|s| $s.id == $entry.snapshot.stack_id })
+          if not $parent_alive {
+            return ("parent stack is in trash; restore the stack first" | metadata set { merge {'http.response': {status: 409}} })
+          }
+          .append clip.restore --meta {target: $ctx.frame_id} | ignore
+        }
         "stack.delete" => { .append stack.restore --meta {target: $ctx.frame_id} | ignore }
         _ => { return ("frame is not a delete" | metadata set { merge {'http.response': {status: 400}} }) }
       }

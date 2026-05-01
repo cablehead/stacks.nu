@@ -253,7 +253,11 @@
       <div style="flex: 1; overflow: auto;">
         {% for row in deletedItems %}
         <div
+          {% if row.canRestore %}
           onmousedown="window.actions.impulse('deleted.select', {id: '{{ row.frame_id }}'}); fetch('/trash/restore/{{ row.frame_id }}', {method: 'POST'})"
+          {% else %}
+          onmousedown="window.actions.impulse('deleted.select', {id: '{{ row.frame_id }}'})"
+          {% endif %}
           title="{% if row.canRestore %}Click to restore{% else %}Parent stack is also deleted; restore the stack first{% endif %}"
           style="
             display: grid;
