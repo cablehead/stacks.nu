@@ -224,6 +224,75 @@
   </div>
   {% endif %}
 
+  {% if mode == "trash" %}
+  <div role="dialog" aria-modal="true" aria-label="Trash" style="
+    position: absolute;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 4rem;
+  ">
+    <div class="modal-box" style="
+      width: min(48rem, 92%);
+      max-height: 70%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    ">
+      <header style="padding: .6rem .85rem; border-bottom: 1px solid var(--primary-7-dim); font-weight: var(--font-weight-medium);">
+        Trash
+      </header>
+      {% if not deletedItems %}
+      <div style="padding: 1.25rem; color: var(--primary-7-dim); font-size: var(--font-size--1);">
+        Nothing in the trash.
+      </div>
+      {% else %}
+      <div style="flex: 1; overflow: auto;">
+        {% for row in deletedItems %}
+        <div
+          onmousedown="window.actions.impulse('deleted.select', {id: '{{ row.frame_id }}'}); fetch('/trash/restore/{{ row.frame_id }}', {method: 'POST'})"
+          title="{% if row.canRestore %}Click to restore{% else %}Parent stack is also deleted; restore the stack first{% endif %}"
+          style="
+            display: grid;
+            grid-template-columns: 1.5rem 1fr auto;
+            gap: .6rem;
+            align-items: center;
+            padding: .5rem .85rem;
+            border-bottom: 1px solid var(--primary-7-dim);
+            cursor: {% if row.canRestore %}pointer{% else %}not-allowed{% endif %};
+            font-size: var(--font-size--1);
+            {% if row.frame_id == selectedDeletedFrameId %}
+              background: var(--primary-3);
+              color: var(--primary-3-on);
+            {% else %}
+              background: transparent;
+              color: inherit;
+            {% endif %}
+            {% if not row.canRestore %}opacity: .55;{% endif %}
+          "
+          {% if row.frame_id == selectedDeletedFrameId %}data-init="el.scrollIntoView({block: 'nearest'})"{% endif %}
+        >
+          <iconify-icon icon="{{ row.icon }}" width="1em" height="1em"></iconify-icon>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <span style="font-family: var(--font-mono);">{{ row.label }}</span>
+            <small style="display: block; color: var(--primary-7-dim); font-size: var(--font-size--2);">
+              {{ row.kind }} | {{ row.sublabel }}
+            </small>
+          </span>
+          <span style="font-size: var(--font-size--2); color: var(--primary-7-dim);">
+            {% if row.canRestore %}{% else %}blocked{% endif %}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   {% if mode == "rename" %}
   <div role="dialog" aria-modal="true" aria-label="Rename stack" style="
     position: absolute;

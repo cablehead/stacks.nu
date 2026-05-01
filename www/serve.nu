@@ -130,6 +130,14 @@ def actions-for [mode: string ctx: record]: nothing -> record {
       "set-mime.markdown": (js-fetch $"/clips/($ctx.setMimeClipId)" --method PATCH --json {mime_type: "text/markdown"} --then (js-impulse "set-mime.close" {}))
       "set-mime.cancel": (js-impulse "set-mime.close" {})
     }
+    "trash" => {
+      "trash.cancel": (js-impulse "trash.close" {})
+      "deleted.next": (js-impulse "deleted.select" {action: "down"})
+      "deleted.prev": (js-impulse "deleted.select" {action: "up"})
+      "restore.do": (if $ctx.selectedDeletedFrameId == null { "" } else {
+        js-fetch $"/trash/restore/($ctx.selectedDeletedFrameId)"
+      })
+    }
     _ => (actions-main $ctx)
   }
 }
@@ -149,6 +157,7 @@ def actions-main [ctx: record]: nothing -> record {
     # YYYY-MM-DD HH:MM:SS; we trim to minutes.
     "stack.new": (js-fetch "/stacks/new" --body "new Date().toLocaleString('sv-SE').slice(0,16)")
     "actions.open": (js-impulse "actions.open" {})
+    "trash.open": (js-impulse "trash.open" {})
   }
   let with_n = if $ctx.selectedStackId != null {
     $core | upsert "clip.new" (js-impulse "compose.open" {stack_id: $ctx.selectedStackId})
@@ -178,24 +187,34 @@ def keymap-for [mode: string ctx: record]: nothing -> record {
     "rename" => {"enter": "rename.save" "cmd+enter": "rename.save" "escape": "rename.cancel"}
     "actions" => {"escape": "actions.cancel" "cmd+k": "actions.cancel"}
     "set-mime" => {"escape": "set-mime.cancel"}
+    "trash" => {
+      "escape": "trash.cancel"
+      "j": "deleted.next"
+      "k": "deleted.prev"
+      "ctrl+n": "deleted.next"
+      "ctrl+p": "deleted.prev"
+      "enter": "restore.do"
+      "u": "restore.do"
+    }
     _ => (keymap-main $ctx)
   }
 }
 
 def keymap-main [ctx: record]: nothing -> record {
-  let base = {
-    "j": "clip.next"
-    "k": "clip.prev"
-    "ctrl+n": "clip.next"
-    "ctrl+p": "clip.prev"
-    "0": "clip.top"
-    "shift+j": "stack.next"
-    "shift+k": "stack.prev"
-    "shift+0": "stack.top"
-    "shift+)": "stack.top"
-    "shift+n": "stack.new"
-    "cmd+k": "actions.open"
-  }
+  let with_trash = if $ctx.hasDeleted { {"shift+t": "trash.open"} } else { {} }
+  let base = $with_trash | merge {
+      "j": "clip.next"
+      "k": "clip.prev"
+      "ctrl+n": "clip.next"
+      "ctrl+p": "clip.prev"
+      "0": "clip.top"
+      "shift+j": "stack.next"
+      "shift+k": "stack.prev"
+      "shift+0": "stack.top"
+      "shift+)": "stack.top"
+      "shift+n": "stack.new"
+      "cmd+k": "actions.open"
+    }
   let with_stack = if $ctx.selectedStackId != null {
     $base
     | upsert "n" "clip.new"
@@ -232,6 +251,12 @@ def bindings-for [mode: string ctx: record]: nothing -> list {
     "set-mime" => [
       {action: "set-mime.cancel" label: "cancel" keys: (glyphs [Esc])}
     ]
+    "trash" => [
+      {action: "restore.do" label: "restore" keys: (glyphs [Enter])}
+      {action: "deleted.next" label: "next" keys: (glyphs [J])}
+      {action: "deleted.prev" label: "prev" keys: (glyphs [K])}
+      {action: "trash.cancel" label: "close" keys: (glyphs [Esc])}
+    ]
     _ => [
       {action: "clip.next" label: "next clip" keys: (glyphs [J])}
       {action: "clip.prev" label: "prev clip" keys: (glyphs [K])}
@@ -252,7 +277,10 @@ def panel-actions-for [mode: string ctx: record]: nothing -> list {
       {action: "set-mime.markdown" label: "Markdown" keys: [] target: "mime" require: "always" groupStart: false}
     ]
   }
-  let items = [
+  let trash_row = if $ctx.hasDeleted {
+    [{action: "trash.open" label: "Trash" keys: (glyphs [Shift T]) target: "stack" require: "always"}]
+  } else { [] }
+  let items = ([
     {action: "clip.new" label: "New clip" keys: (glyphs [N]) target: "clip" require: "stack"}
     {action: "clip.edit" label: "Edit clip" keys: (glyphs [E]) target: "clip" require: "clip"}
     {action: "clip.set-mime" label: "Set content type" keys: [] target: "clip" require: "clip"}
@@ -261,7 +289,7 @@ def panel-actions-for [mode: string ctx: record]: nothing -> list {
     {action: "stack.rename" label: "Rename stack" keys: (glyphs [R]) target: "stack" require: "stack"}
     {action: "stack.sort.toggle" label: "Toggle sort" keys: [] target: "stack" require: "stack"}
     {action: "stack.delete" label: "Delete stack" keys: (glyphs [Shift Del]) target: "stack" require: "stack"}
-  ]
+  ] | append $trash_row)
   let visible = $items | where {|x|
       match $x.require {
         "always" => true
@@ -301,6 +329,7 @@ def mode-name-for [mode: string ctx: record]: nothing -> string {
     "rename" => "Rename stack"
     "actions" => "Actions"
     "set-mime" => "Set content type"
+    "trash" => "Trash"
     _ => {
       if $ctx.selectedStack == null { "Stacks" } else { ($ctx.selectedStack.name? | default "Untitled") }
     }
@@ -330,6 +359,49 @@ def view-model [state: record]: nothing -> record {
   let edit_name = if $edit_target == null { "" } else { $edit_target.stackName }
   let rename_stack = $state.stacks | where id == $state.renameStackId | get -i 0
   let rename_initial = if $rename_stack == null { "" } else { $rename_stack.name? | default "" }
+
+  # Trash list: hydrate each delete entry into a renderable row. Newest first
+  # (state.deleted is already prepended-on-delete). For clip rows, mark
+  # `canRestore: false` when the parent stack is itself deleted -- the row is
+  # shown but the action no-ops (mirrors projection's clip-restore guard).
+  let deleted_items = $state.deleted | each {|entry|
+      if $entry.kind == "clip" {
+        let parent_id = $entry.snapshot.stack_id
+        let parent_stack = $state.stacks | where id == $parent_id | get -i 0
+        let parent_in_trash = $state.deleted | any {|e| $e.kind == "stack" and $e.snapshot.stack.id == $parent_id }
+        let parent_alive = ($parent_stack != null) and (not $parent_in_trash)
+        let body = if $entry.snapshot.clip.hash == null { "" } else {
+          try { .cas $entry.snapshot.clip.hash } catch { "" }
+        }
+        let preview = ($body | str replace -ar "\\s+" " " | str trim | str substring 0..120)
+        {
+          frame_id: $entry.frame_id
+          kind: "clip"
+          icon: "lucide:file-text"
+          label: (if ($preview | is-empty) { "(empty)" } else { $preview })
+          sublabel: (if $parent_stack != null { $parent_stack.name? | default "Untitled" } else { "(deleted stack)" })
+          canRestore: $parent_alive
+        }
+      } else {
+        let s = $entry.snapshot.stack
+        {
+          frame_id: $entry.frame_id
+          kind: "stack"
+          icon: "lucide:layers"
+          label: ($s.name? | default "Untitled")
+          sublabel: $"($s.clips | length) clip\(s\)"
+          canRestore: true
+        }
+      }
+    }
+  let has_deleted = (not ($deleted_items | is-empty))
+  # Default selection in trash mode: first row, when nothing is selected yet.
+  let selected_deleted = if $state.mode == "trash" and $state.selectedDeletedFrameId == null and $has_deleted {
+    $deleted_items | first | get frame_id
+  } else {
+    $state.selectedDeletedFrameId
+  }
+
   let ctx = {
     composeStackId: $state.composeStackId
     composeStackName: $compose_name
@@ -340,6 +412,8 @@ def view-model [state: record]: nothing -> record {
     selectedStackId: $state.selectedStackId
     selectedClipId: $state.selectedClipId
     selectedStack: $stack
+    selectedDeletedFrameId: $selected_deleted
+    hasDeleted: $has_deleted
   }
   let actions = actions-for $state.mode $ctx
   let keymap = keymap-for $state.mode $ctx
@@ -366,6 +440,8 @@ def view-model [state: record]: nothing -> record {
     bindings: $bindings
     stackActions: $stack_actions
     panelActions: $panel_actions
+    deletedItems: $deleted_items
+    selectedDeletedFrameId: $selected_deleted
     actions: ($actions | to json -r)
     keymap: ($keymap | to json -r)
   }
@@ -416,6 +492,28 @@ def design-state [variant: string]: nothing -> record {
     "rename" => ($base | update mode "rename" | update renameStackId "s1")
     "actions" => ($base | update mode "actions")
     "set-mime" => ($base | update mode "set-mime" | update setMimeClipId "c1")
+    "trash" => ($base
+    | update mode "trash"
+    | update deleted [
+      {
+        frame_id: "td1"
+        kind: "clip"
+        snapshot: {
+          clip: {id: "cx" hash: null mime_type: "text/plain" position: null lastTouched: "cx" versions: ["cx"]}
+          stack_id: "s1"
+        }
+        deleted_at: "td1"
+      }
+      {
+        frame_id: "tsd1"
+        kind: "stack"
+        snapshot: {
+          stack: {id: "sx" name: "Old Stack" sort: "auto" lastTouched: "sx" clips: []}
+        }
+        deleted_at: "tsd1"
+      }
+    ]
+    | update selectedDeletedFrameId "td1")
     _ => $base
   }
 }
@@ -438,7 +536,7 @@ def design-tile-html [variant: string]: nothing -> string {
 }
 
 def design-page []: nothing -> any {
-  let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions" "set-mime"]
+  let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions" "set-mime" "trash"]
   (HTML
   (HEAD
   (META {charset: "utf-8"})
