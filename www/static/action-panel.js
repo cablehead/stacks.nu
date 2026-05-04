@@ -53,22 +53,21 @@
   window.actionPanel = {
     mount: function (panel) {
       const closeTopic = panel.dataset.closeTopic || "actions.close";
-      // Capture whatever should be refocused when the panel closes. Prefer
-      // an explicit `data-restore-focus` selector (so we don't rely on
-      // activeElement timing -- the filter input's data-init may have
-      // already grabbed focus by the time mount() runs). Fall back to
-      // whatever was active.
+      // Refocus a target element after the panel is removed from the DOM
+      // (any close path: Esc, click-outside, Enter, row click). Re-query
+      // at restore time -- idiomorph may recreate the target during
+      // morph, so a captured reference can go stale. Defer past the
+      // current frame with rAF to let morph settle before focus().
       const restoreSelector = panel.dataset.restoreFocus;
-      const previouslyFocused = restoreSelector
-        ? document.querySelector(restoreSelector)
-        : document.activeElement;
       const restore = new MutationObserver(() => {
-        if (!document.body.contains(panel)) {
-          if (previouslyFocused && document.body.contains(previouslyFocused)) {
-            previouslyFocused.focus();
-          }
-          restore.disconnect();
-        }
+        if (document.body.contains(panel)) return;
+        restore.disconnect();
+        requestAnimationFrame(() => {
+          const target = restoreSelector
+            ? document.querySelector(restoreSelector)
+            : null;
+          if (target) target.focus();
+        });
       });
       restore.observe(document.body, { childList: true, subtree: true });
       const input = $(panel, "#actions-filter");
