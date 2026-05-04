@@ -117,6 +117,12 @@ button:hover > iconify-icon {
   background: var(--primary-7-dim);
 }
 
+/* Pipe-mode history rows: hover or arrow-selected highlight. */
+.pipe-history-row:hover, .pipe-history-row.is-selected {
+  background: var(--primary-3) !important;
+  color: var(--primary-3-on) !important;
+}
+
 pre, code {
   font-family: var(--font-mono);
 }

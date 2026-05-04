@@ -356,8 +356,10 @@
           {% for src in pipeHistoryRecent | reverse %}
           <button
             type="button"
+            class="pipe-history-row"
+            data-history-index="{{ loop.revindex0 }}"
             title="{{ src }}"
-            onmousedown='var i=document.querySelector("#pipe-text"); i.value={{ src | tojson | safe }}; i.focus(); i.setSelectionRange(i.value.length, i.value.length)'
+            onmousedown='var i=document.querySelector("#pipe-text"); i.value={{ src | tojson | safe }}; i.focus(); i.setSelectionRange(i.value.length, i.value.length); window.pipeHistory && window.pipeHistory.refresh()'
             style="
               display: block;
               width: 100%;
