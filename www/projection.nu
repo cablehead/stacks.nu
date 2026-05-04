@@ -40,7 +40,7 @@
 # float to the top), manual = position asc.
 
 export def empty []: nothing -> record {
-  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null setMimeClipId: null clipCursors: {} selectionExplicit: false frameId: null deleted: [] selectedDeletedFrameId: null}
+  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null setMimeClipId: null clipCursors: {} selectionExplicit: false frameId: null deleted: [] selectedDeletedFrameId: null pipeClipId: null pipeResult: null}
 }
 
 # Pick the id that occupies the same slot after `removed` is dropped from
@@ -102,6 +102,9 @@ export def apply-frame [state: record frame: record]: nothing -> record {
     "deleted.select" => (deleted-select $state $frame)
     "clip.restore" => (clip-restore $state $frame)
     "stack.restore" => (stack-restore $state $frame)
+    "pipe.open" => ($state | update mode "pipe" | update pipeClipId ($frame.meta?.clip_id?) | update pipeResult null)
+    "pipe.close" => ($state | update mode "main" | update pipeClipId null | update pipeResult null)
+    "pipe.result" => ($state | update pipeResult {ok: ($frame.meta?.ok? | default false) body: ($frame.meta?.body? | default "") error: ($frame.meta?.error?)})
     _ => $state
   }
   remember-cursor $s | update frameId ($frame.id? | default $s.frameId)

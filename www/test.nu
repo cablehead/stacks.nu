@@ -453,6 +453,42 @@ assert equal $closed_trash.mode "main"
 assert equal $closed_trash.selectedDeletedFrameId null
 print "   ok"
 
+print "5q. pipe.open / pipe.result / pipe.close cycle"
+let pipe_setup = [
+  {topic: "stack.add" id: "ps1" hash: null meta: {name: "P" sort: "auto"}}
+  {topic: "clip.add" id: "pc1" hash: "ph1" meta: {stack_id: "ps1" mime_type: "text/plain"}}
+]
+let opened = $pipe_setup | append [
+    {topic: "pipe.open" id: "pop1" hash: null meta: {clip_id: "pc1"}}
+  ] | projection project
+assert equal $opened.mode "pipe"
+assert equal $opened.pipeClipId "pc1"
+assert equal $opened.pipeResult null
+
+let with_result = $pipe_setup | append [
+    {topic: "pipe.open" id: "pop1" hash: null meta: {clip_id: "pc1"}}
+    {topic: "pipe.result" id: "pres1" hash: null meta: {ok: true body: "HELLO"}}
+  ] | projection project
+assert equal $with_result.pipeResult.ok true
+assert equal $with_result.pipeResult.body "HELLO"
+
+let with_error = $pipe_setup | append [
+    {topic: "pipe.open" id: "pop1" hash: null meta: {clip_id: "pc1"}}
+    {topic: "pipe.result" id: "pres1" hash: null meta: {ok: false body: "" error: "boom"}}
+  ] | projection project
+assert equal $with_error.pipeResult.ok false
+assert equal $with_error.pipeResult.error "boom"
+
+let closed = $pipe_setup | append [
+    {topic: "pipe.open" id: "pop1" hash: null meta: {clip_id: "pc1"}}
+    {topic: "pipe.result" id: "pres1" hash: null meta: {ok: true body: "x"}}
+    {topic: "pipe.close" id: "pcl1" hash: null meta: {}}
+  ] | projection project
+assert equal $closed.mode "main"
+assert equal $closed.pipeClipId null
+assert equal $closed.pipeResult null
+print "   ok"
+
 print "6. apply-frame: ignores unknown topics"
 let s = projection empty
 let out = projection apply-frame $s {topic: "xs.pulse" id: "p" hash: null meta: null}

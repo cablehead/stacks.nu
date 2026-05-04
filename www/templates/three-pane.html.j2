@@ -297,6 +297,61 @@
   </div>
   {% endif %}
 
+  {% if mode == "pipe" %}
+  <div role="dialog" aria-modal="true" aria-label="Pipe clip" style="
+    position: absolute;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    padding: 1ch;
+  ">
+    <div class="modal-box" style="
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    ">
+      <input
+        id="pipe-text"
+        type="text"
+        placeholder="$in | str upcase"
+        spellcheck="false"
+        autocomplete="off"
+        data-init="el.focus(); el.setSelectionRange(el.value.length, el.value.length)"
+        style="
+          width: 100%;
+          font-family: var(--font-mono);
+          font-size: var(--font-size-0);
+          padding: .6rem .85rem;
+          border: 0;
+          border-bottom: 1px solid var(--primary-7-dim);
+          background: var(--primary-7);
+          color: inherit;
+        "
+      />
+      <div id="pipe-result" style="
+        flex: 1;
+        overflow: auto;
+        padding: 1rem 1.25rem;
+        font-family: var(--font-mono);
+        font-size: var(--font-size--1);
+        line-height: var(--font-line-height-1);
+      ">
+        {% if pipeResult %}
+          {% if pipeResult.ok %}
+          <pre style="margin: 0; white-space: pre-wrap; word-break: break-word;">{{ pipeResult.body }}</pre>
+          {% else %}
+          <pre style="margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--primary-1);">{{ pipeResult.error }}</pre>
+          {% endif %}
+        {% else %}
+        <p style="color: var(--primary-7-dim);">Type a nushell pipeline above; the clip's body is `$in`.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {% if mode == "rename" %}
   <div role="dialog" aria-modal="true" aria-label="Rename stack" style="
     position: absolute;

@@ -127,6 +127,8 @@ const IMPULSE_TOPICS = [
   "trash.open"
   "trash.close"
   "deleted.select"
+  "pipe.open"
+  "pipe.close"
 ]
 
 # Action registry. Action id -> JS string. Triggers (keymap, status-bar
@@ -161,6 +163,10 @@ def actions-for [mode: string ctx: record]: nothing -> record {
         js-fetch $"/trash/restore/($ctx.selectedDeletedFrameId)"
       })
     }
+    "pipe" => {
+      "pipe.run": (js-fetch $"/pipe/run/($ctx.pipeClipId)" --body "document.querySelector('#pipe-text').value")
+      "pipe.cancel": (js-impulse "pipe.close" {})
+    }
     _ => (actions-main $ctx)
   }
 }
@@ -190,6 +196,7 @@ def actions-main [ctx: record]: nothing -> record {
     | upsert "clip.edit" (js-impulse "editor.open" {clip_id: $ctx.selectedClipId})
     | upsert "clip.delete" (js-fetch $"/clips/($ctx.selectedClipId)" --method DELETE)
     | upsert "clip.set-mime" (js-impulse "set-mime.open" {clip_id: $ctx.selectedClipId})
+    | upsert "clip.pipe" (js-impulse "pipe.open" {clip_id: $ctx.selectedClipId})
   } else { $with_n }
   if $ctx.selectedStack != null {
     let next_sort = if $ctx.selectedStack.sort == "auto" { "manual" } else { "auto" }
@@ -220,6 +227,7 @@ def keymap-for [mode: string ctx: record]: nothing -> record {
       "enter": "restore.do"
       "u": "restore.do"
     }
+    "pipe" => ({"escape": "pipe.cancel"} | upsert $"($mod)+enter" "pipe.run")
     _ => (keymap-main $ctx)
   }
 }
@@ -249,6 +257,7 @@ def keymap-main [ctx: record]: nothing -> record {
   if $ctx.selectedClipId != null {
     $with_stack
     | upsert "e" "clip.edit"
+    | upsert "p" "clip.pipe"
     | upsert "delete" "clip.delete"
     | upsert "backspace" "clip.delete"
   } else { $with_stack }
@@ -282,6 +291,10 @@ def bindings-for [mode: string ctx: record]: nothing -> list {
       {action: "deleted.prev" label: "prev" keys: (glyphs [K])}
       {action: "trash.cancel" label: "close" keys: (glyphs [Esc])}
     ]
+    "pipe" => [
+      {action: "pipe.run" label: "run" keys: (glyphs [$m Enter])}
+      {action: "pipe.cancel" label: "cancel" keys: (glyphs [Esc])}
+    ]
     _ => [
       {action: "clip.next" label: "next clip" keys: (glyphs [J])}
       {action: "clip.prev" label: "prev clip" keys: (glyphs [K])}
@@ -309,6 +322,7 @@ def panel-actions-for [mode: string ctx: record]: nothing -> list {
     {action: "clip.new" label: "New clip" keys: (glyphs [N]) target: "clip" require: "stack"}
     {action: "clip.edit" label: "Edit clip" keys: (glyphs [E]) target: "clip" require: "clip"}
     {action: "clip.set-mime" label: "Set content type" keys: [] target: "clip" require: "clip"}
+    {action: "clip.pipe" label: "Pipe clip" keys: (glyphs [P]) target: "clip" require: "clip"}
     {action: "clip.delete" label: "Delete clip" keys: (glyphs [Del]) target: "clip" require: "clip"}
     {action: "stack.new" label: "New stack" keys: (glyphs [Shift N]) target: "stack" require: "always"}
     {action: "stack.rename" label: "Rename stack" keys: (glyphs [R]) target: "stack" require: "stack"}
@@ -355,6 +369,7 @@ def mode-name-for [mode: string ctx: record]: nothing -> string {
     "actions" => "Actions"
     "set-mime" => "Set content type"
     "trash" => "Trash"
+    "pipe" => (if $ctx.pipeStackName == "" { "Pipe clip" } else { $"Pipe clip from ($ctx.pipeStackName)" })
     _ => {
       if $ctx.selectedStack == null { "Stacks" } else { ($ctx.selectedStack.name? | default "Untitled") }
     }
@@ -386,6 +401,8 @@ def view-model [state: record --is-mac = true]: nothing -> record {
   let edit_name = if $edit_target == null { "" } else { $edit_target.stackName }
   let rename_stack = $state.stacks | where id == $state.renameStackId | get -i 0
   let rename_initial = if $rename_stack == null { "" } else { $rename_stack.name? | default "" }
+  let pipe_target = find-clip $state $state.pipeClipId
+  let pipe_stack_name = if $pipe_target == null { "" } else { $pipe_target.stackName }
 
   # Trash list: hydrate each delete entry into a renderable row. Newest first
   # (state.deleted is already prepended-on-delete). For clip rows, mark
@@ -442,6 +459,8 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     selectedDeletedFrameId: $selected_deleted
     hasDeleted: $has_deleted
     isMac: $is_mac
+    pipeClipId: $state.pipeClipId
+    pipeStackName: $pipe_stack_name
   }
   let actions = actions-for $state.mode $ctx
   let keymap = keymap-for $state.mode $ctx
@@ -470,6 +489,9 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     panelActions: $panel_actions
     deletedItems: $deleted_items
     selectedDeletedFrameId: $selected_deleted
+    pipeClipId: $state.pipeClipId
+    pipeStackName: $pipe_stack_name
+    pipeResult: $state.pipeResult
     actions: ($actions | to json -r)
     keymap: ($keymap | to json -r)
   }
@@ -542,6 +564,8 @@ def design-state [variant: string]: nothing -> record {
       }
     ]
     | update selectedDeletedFrameId "td1")
+    "pipe" => ($base | update mode "pipe" | update pipeClipId "c1" | update pipeResult {ok: true body: "PREVIEW OUTPUT" error: null})
+    "pipe-error" => ($base | update mode "pipe" | update pipeClipId "c1" | update pipeResult {ok: false body: "" error: "Parse error: missing argument"})
     _ => $base
   }
 }
@@ -564,7 +588,7 @@ def design-tile-html [variant: string --is-mac = true]: nothing -> string {
 }
 
 def design-page [--is-mac = true]: nothing -> any {
-  let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions" "set-mime" "trash"]
+  let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions" "set-mime" "trash" "pipe" "pipe-error"]
   (HTML
   (HEAD
   (META {charset: "utf-8"})
@@ -890,6 +914,32 @@ bootstrap-if-empty
         _ => { return ("frame is not a delete" | metadata set { merge {'http.response': {status: 400}} }) }
       }
       .append trash.close --meta {} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
+
+    # ---- pipe ----
+    # Run a user-supplied nushell pipeline against the clip's body. Result
+    # (or error) is recorded as an ephemeral pipe.result frame; the
+    # projection picks it up and the SSE stream re-renders the result pane.
+    (route {method: "POST" path-matches: "/pipe/run/:clip_id"} {|req ctx|
+      let pipeline = $in
+      let frame = .get $ctx.clip_id
+      if $frame == null {
+        return ("Not Found" | metadata set { merge {'http.response': {status: 404}} })
+      }
+      let body = if $frame.hash? == null { "" } else { try { .cas $frame.hash } catch { "" } }
+      let outcome = try {
+        let raw = $body | .run $pipeline | to text
+        # Cap at 64KB so a runaway pipeline doesn't push a huge frame meta.
+        let cap = 65536
+        let result = if ($raw | str length) > $cap {
+          ($raw | str substring 0..$cap) + "\n... (truncated)"
+        } else { $raw }
+        {ok: true body: $result}
+      } catch {|e|
+        {ok: false body: "" error: $e.msg}
+      }
+      .append pipe.result --meta $outcome --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
