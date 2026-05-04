@@ -939,7 +939,12 @@ bootstrap-if-empty
         } else { $raw }
         {ok: true body: $result}
       } catch {|e|
-        {ok: false body: "" error: $e.msg}
+        # $e.msg is only the error title (e.g. "Parse error"). The detail
+        # lives in $e.json.labels[*].text -- join them onto the title.
+        let parsed = try { $e.json | from json } catch { {labels: []} }
+        let detail = $parsed.labels? | default [] | get text? | default [] | str join "; "
+        let full = if ($detail | is-empty) { $e.msg } else { $"($e.msg): ($detail)" }
+        {ok: false body: "" error: $full}
       }
       .append pipe.result --meta $outcome --ttl ephemeral | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
