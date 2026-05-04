@@ -495,6 +495,7 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     pipeStackName: $pipe_stack_name
     pipeResult: $state.pipeResult
     pipeHistoryJson: ($state.pipeHistory | to json -r)
+    pipeHistoryRecent: ($state.pipeHistory | first 5)
     actions: ($actions | to json -r)
     keymap: ($keymap | to json -r)
   }
@@ -567,8 +568,16 @@ def design-state [variant: string]: nothing -> record {
       }
     ]
     | update selectedDeletedFrameId "td1")
-    "pipe" => ($base | update mode "pipe" | update pipeClipId "c1" | update pipeResult {ok: true body: "PREVIEW OUTPUT" error: null})
-    "pipe-error" => ($base | update mode "pipe" | update pipeClipId "c1" | update pipeResult {ok: false body: "" error: "Parse error: missing argument"})
+    "pipe" => ($base
+    | update mode "pipe"
+    | update pipeClipId "c1"
+    | update pipeResult {ok: true body: "PREVIEW OUTPUT" error: null}
+    | update pipeHistory ["str upcase" "lines | length" "from json | get name" "where size > 1kb" "$in | str trim"])
+    "pipe-error" => ($base
+    | update mode "pipe"
+    | update pipeClipId "c1"
+    | update pipeResult {ok: false body: "" error: "Parse error: missing argument"}
+    | update pipeHistory ["str upcase" "from json"])
     _ => $base
   }
 }
