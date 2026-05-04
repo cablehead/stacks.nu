@@ -402,6 +402,7 @@ def view-model [state: record --is-mac = true]: nothing -> record {
   let rename_stack = $state.stacks | where id == $state.renameStackId | get -i 0
   let rename_initial = if $rename_stack == null { "" } else { $rename_stack.name? | default "" }
   let pipe_target = find-clip $state $state.pipeClipId
+  let pipe_clip = if $pipe_target == null { null } else { hydrate-clip $pipe_target.clip }
   let pipe_stack_name = if $pipe_target == null { "" } else { $pipe_target.stackName }
 
   # Trash list: hydrate each delete entry into a renderable row. Newest first
@@ -490,6 +491,7 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     deletedItems: $deleted_items
     selectedDeletedFrameId: $selected_deleted
     pipeClipId: $state.pipeClipId
+    pipeClip: $pipe_clip
     pipeStackName: $pipe_stack_name
     pipeResult: $state.pipeResult
     actions: ($actions | to json -r)
