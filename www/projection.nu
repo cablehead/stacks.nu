@@ -430,7 +430,17 @@ export def project []: list -> record {
 export def project-stream []: any -> any {
   generate {|frame state|
     if $frame.topic == "xs.threshold" {
-      let reconciled = $state.value | reconcile-selection
+      # Cold replay folds in persistent selection-bumps from clip.restore /
+      # stack.restore. Those are correct *live* (the user just clicked
+      # restore -- focus the restored thing) but on a fresh load we want
+      # the cursor on the top of lastTouched-desc, not pinned to whatever
+      # was last restored in history. Wipe selection at the boundary;
+      # reconcile-selection then picks defaults.
+      let reset = $state.value
+        | update selectedStackId null
+        | update selectedClipId null
+        | update selectionExplicit false
+      let reconciled = $reset | reconcile-selection
       let next = {value: $reconciled live: true}
       return {next: $next out: $reconciled}
     }

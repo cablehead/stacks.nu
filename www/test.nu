@@ -453,6 +453,26 @@ assert equal $closed_trash.mode "main"
 assert equal $closed_trash.selectedDeletedFrameId null
 print "   ok"
 
+print "5r. xs.threshold resets selection: cold replay lands on the top stack"
+# Cold replay through restore frames bumps selection (and selectionExplicit)
+# to the restored clip. After threshold those bumps shouldn't pin selection
+# -- we want the user to land on the most-recently-touched stack on load.
+let cold_replay = [
+  {topic: "stack.add" id: "rs1" hash: null meta: {name: "Older" sort: "auto"}}
+  {topic: "stack.add" id: "rs2" hash: null meta: {name: "Newer" sort: "auto"}}
+  {topic: "clip.add" id: "rc1" hash: "h" meta: {stack_id: "rs1" mime_type: "text/plain"}}
+  {topic: "clip.delete" id: "rb1" hash: null meta: {id: "rc1"}}
+  {topic: "clip.restore" id: "rb2" hash: null meta: {target: "rb1"}}
+  # Newer stack gets the most-recent activity (rzz > rb1 lex, so rs2 wins lastTouched-desc).
+  {topic: "clip.add" id: "rzz" hash: "h2" meta: {stack_id: "rs2" mime_type: "text/plain"}}
+  {topic: "xs.threshold"}
+]
+let outs = $cold_replay | projection project-stream
+let at_thresh = $outs | first
+assert equal $at_thresh.selectedStackId "rs2" "threshold should pick top of lastTouched-desc, not the restored clip's stack"
+assert equal $at_thresh.selectionExplicit false "threshold should clear selectionExplicit"
+print "   ok"
+
 print "5q. pipe.open / pipe.result / pipe.close cycle"
 let pipe_setup = [
   {topic: "stack.add" id: "ps1" hash: null meta: {name: "P" sort: "auto"}}
