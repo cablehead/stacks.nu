@@ -349,6 +349,7 @@
         {% endif %}
       </section>
 
+      {% if mode == "pipe" %}
       <input
         id="pipe-text"
         type="text"
@@ -368,6 +369,23 @@
           color: inherit;
         "
       />
+      {% else %}
+      <div
+        aria-hidden="true"
+        style="
+          width: 100%;
+          font-family: var(--font-mono);
+          font-size: var(--font-size-0);
+          padding: .6rem .85rem;
+          border-top: 1px solid var(--primary-7-dim);
+          background: var(--primary-7);
+          color: var(--primary-7-dim);
+          white-space: pre;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        "
+      >{{ pipeText | default("") }}</div>
+      {% endif %}
 
       <section id="pipe-result" aria-label="Pipeline result" style="
         overflow: auto;
@@ -391,7 +409,6 @@
       <div role="dialog" aria-modal="true" aria-label="Pipe history"
         data-close-topic="pipe.history.close"
         data-skip-close-on-invoke="1"
-        data-restore-focus="#pipe-text"
         data-init="window.actionPanel && window.actionPanel.mount(el)"
         style="
           position: absolute;
