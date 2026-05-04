@@ -390,6 +390,8 @@
       {% if mode == "pipe-history" %}
       <div role="dialog" aria-modal="true" aria-label="Pipe history"
         data-close-topic="pipe.history.close"
+        data-skip-close-on-invoke="1"
+        data-restore-focus="#pipe-text"
         data-init="window.actionPanel && window.actionPanel.mount(el)"
         style="
           position: absolute;

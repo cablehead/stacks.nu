@@ -35,8 +35,15 @@
   }
   // Cancel first, then invoke -- so the close frame is appended before
   // any frame the action itself emits (e.g. compose.open from clip.new).
-  // Server-side projection sees them in that order.
+  // Server-side projection sees them in that order. Panels whose action
+  // already encodes the close (e.g. pipe-history's select also flips the
+  // mode back) opt out via data-skip-close-on-invoke="1" -- one round
+  // trip, one morph, and focus restoration runs cleanly afterward.
   function fire(panel, id) {
+    if (panel.dataset.skipCloseOnInvoke === "1") {
+      window.actions.invoke(id);
+      return;
+    }
     const closeTopic = panel.dataset.closeTopic || "actions.close";
     window.actions.impulse(closeTopic, {}).finally(() => {
       window.actions.invoke(id);
@@ -46,11 +53,15 @@
   window.actionPanel = {
     mount: function (panel) {
       const closeTopic = panel.dataset.closeTopic || "actions.close";
-      // Capture whatever was focused before the panel took over -- restore
-      // it when the panel is removed from the DOM (any close path: Esc,
-      // click-outside, Enter, row click). Keeps `pipe-text` focused on
-      // close even though datastar's morph doesn't re-fire its data-init.
-      const previouslyFocused = document.activeElement;
+      // Capture whatever should be refocused when the panel closes. Prefer
+      // an explicit `data-restore-focus` selector (so we don't rely on
+      // activeElement timing -- the filter input's data-init may have
+      // already grabbed focus by the time mount() runs). Fall back to
+      // whatever was active.
+      const restoreSelector = panel.dataset.restoreFocus;
+      const previouslyFocused = restoreSelector
+        ? document.querySelector(restoreSelector)
+        : document.activeElement;
       const restore = new MutationObserver(() => {
         if (!document.body.contains(panel)) {
           if (previouslyFocused && document.body.contains(previouslyFocused)) {
