@@ -351,7 +351,7 @@
       <input
         id="pipe-text"
         type="text"
-        placeholder="$in | str upcase"
+        placeholder="str upcase"
         spellcheck="false"
         autocomplete="off"
         data-init="el.focus(); el.setSelectionRange(el.value.length, el.value.length)"
@@ -381,7 +381,7 @@
           <pre style="margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--primary-1);">{{ pipeResult.error }}</pre>
           {% endif %}
         {% else %}
-        <p style="color: var(--primary-7-dim);">Type a nushell pipeline above; the clip's body is `$in`.</p>
+        <p style="color: var(--primary-7-dim);">Type a nushell pipeline above; the clip's body is the input.</p>
         {% endif %}
       </section>
     </div>
