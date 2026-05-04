@@ -370,21 +370,26 @@
         "
       />
       {% else %}
-      <div
-        aria-hidden="true"
+      <input
+        id="pipe-text-inert"
+        type="text"
+        placeholder="str upcase"
+        spellcheck="false"
+        autocomplete="off"
+        value="{{ pipeText }}"
+        readonly
+        tabindex="-1"
         style="
           width: 100%;
           font-family: var(--font-mono);
           font-size: var(--font-size-0);
           padding: .6rem .85rem;
+          border: 0;
           border-top: 1px solid var(--primary-7-dim);
           background: var(--primary-7);
-          color: var(--primary-7-dim);
-          white-space: pre;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          color: inherit;
         "
-      >{{ pipeText | default("") }}</div>
+      />
       {% endif %}
 
       <section id="pipe-result" aria-label="Pipeline result" style="
