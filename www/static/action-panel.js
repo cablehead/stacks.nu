@@ -46,6 +46,20 @@
   window.actionPanel = {
     mount: function (panel) {
       const closeTopic = panel.dataset.closeTopic || "actions.close";
+      // Capture whatever was focused before the panel took over -- restore
+      // it when the panel is removed from the DOM (any close path: Esc,
+      // click-outside, Enter, row click). Keeps `pipe-text` focused on
+      // close even though datastar's morph doesn't re-fire its data-init.
+      const previouslyFocused = document.activeElement;
+      const restore = new MutationObserver(() => {
+        if (!document.body.contains(panel)) {
+          if (previouslyFocused && document.body.contains(previouslyFocused)) {
+            previouslyFocused.focus();
+          }
+          restore.disconnect();
+        }
+      });
+      restore.observe(document.body, { childList: true, subtree: true });
       const input = $(panel, "#actions-filter");
       if (input) {
         input.addEventListener("input", () => applyFilter(panel, input.value));
