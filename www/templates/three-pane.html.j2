@@ -408,24 +408,10 @@
           overflow: hidden;
         "
       >
-        <div style="padding: .6rem .85rem; border-bottom: 1px solid var(--primary-7-dim);">
-          <input
-            id="actions-filter"
-            type="text"
-            placeholder="Search history..."
-            spellcheck="false"
-            data-init="el.focus()"
-            style="
-              width: 100%;
-              font-size: var(--font-size--1);
-              line-height: var(--font-line-height-1);
-            "
-          />
-        </div>
-        <div class="action-rows" style="flex: 1; overflow: auto; padding: .35rem;">
-          {% for row in panelActions %}
+        <div class="action-rows" style="flex: 1; overflow: auto; padding: .35rem; display: flex; flex-direction: column; justify-content: flex-end;">
+          {% for row in panelActions | reverse %}
           <div
-            class="action-row{% if loop.first %} is-selected{% endif %}"
+            class="action-row{% if loop.last %} is-selected{% endif %}"
             data-action="{{ row.action }}"
             style="
               display: flex;
@@ -444,6 +430,20 @@
             <span style="overflow: hidden; text-overflow: ellipsis;">{{ row.label }}</span>
           </div>
           {% endfor %}
+        </div>
+        <div style="padding: .6rem .85rem; border-top: 1px solid var(--primary-7-dim);">
+          <input
+            id="actions-filter"
+            type="text"
+            placeholder="Search history..."
+            spellcheck="false"
+            data-init="el.focus()"
+            style="
+              width: 100%;
+              font-size: var(--font-size--1);
+              line-height: var(--font-line-height-1);
+            "
+          />
         </div>
       </div>
       {% endif %}
