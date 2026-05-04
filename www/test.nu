@@ -489,6 +489,34 @@ assert equal ($capped.pipeHistory | first) "cmd 105"
 assert equal ($capped.pipeHistory | last) "cmd 6"
 print "   ok"
 
+print "5t. pipe.history.open captures current input; select sets pipeText; close keeps it"
+let p_open = [
+  {topic: "pipe.command" id: "pc1" hash: null meta: {source: "str upcase"}}
+  {topic: "pipe.command" id: "pc2" hash: null meta: {source: "lines"}}
+  {topic: "pipe.open" id: "po1" hash: null meta: {clip_id: "c1"}}
+  {topic: "pipe.history.open" id: "pho1" hash: null meta: {current: "partial type"}}
+] | projection project
+assert equal $p_open.mode "pipe-history"
+assert equal $p_open.pipeText "partial type"
+
+let p_select = [
+  {topic: "pipe.command" id: "pc1" hash: null meta: {source: "str upcase"}}
+  {topic: "pipe.open" id: "po1" hash: null meta: {clip_id: "c1"}}
+  {topic: "pipe.history.open" id: "pho1" hash: null meta: {current: "x"}}
+  {topic: "pipe.history.select" id: "phs1" hash: null meta: {source: "str upcase"}}
+] | projection project
+assert equal $p_select.mode "pipe"
+assert equal $p_select.pipeText "str upcase"
+
+let p_close = [
+  {topic: "pipe.open" id: "po1" hash: null meta: {clip_id: "c1"}}
+  {topic: "pipe.history.open" id: "pho1" hash: null meta: {current: "stashed"}}
+  {topic: "pipe.history.close" id: "phc1" hash: null meta: {}}
+] | projection project
+assert equal $p_close.mode "pipe"
+assert equal $p_close.pipeText "stashed" "close should leave pipeText (the user's stashed input)"
+print "   ok"
+
 print "5q. pipe.open / pipe.result / pipe.close cycle"
 let pipe_setup = [
   {topic: "stack.add" id: "ps1" hash: null meta: {name: "P" sort: "auto"}}

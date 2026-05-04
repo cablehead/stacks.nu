@@ -129,6 +129,9 @@ const IMPULSE_TOPICS = [
   "deleted.select"
   "pipe.open"
   "pipe.close"
+  "pipe.history.open"
+  "pipe.history.close"
+  "pipe.history.select"
 ]
 
 # Action registry. Action id -> JS string. Triggers (keymap, status-bar
@@ -166,7 +169,16 @@ def actions-for [mode: string ctx: record]: nothing -> record {
     "pipe" => {
       "pipe.run": (js-fetch $"/pipe/run/($ctx.pipeClipId)" --body "document.querySelector('#pipe-text').value")
       "pipe.cancel": (js-impulse "pipe.close" {})
+      # The history-open action captures the user's currently-typed text so
+      # cancelling the popup restores it. Custom JS because js-impulse takes
+      # a static meta record; here meta.current is dynamic (DOM read).
+      "pipe.history.open": "window.actions.impulse('pipe.history.open', {current: document.querySelector('#pipe-text').value})"
     }
+    "pipe-history" => ($ctx.pipeHistory
+    | enumerate
+    | reduce -f {"pipe-history.cancel": (js-impulse "pipe.history.close" {})} {|it acc|
+      $acc | upsert $"history.load.($it.index)" (js-impulse "pipe.history.select" {source: $it.item})
+    })
     _ => (actions-main $ctx)
   }
 }
@@ -227,7 +239,8 @@ def keymap-for [mode: string ctx: record]: nothing -> record {
       "enter": "restore.do"
       "u": "restore.do"
     }
-    "pipe" => ({"escape": "pipe.cancel"} | upsert $"($mod)+enter" "pipe.run")
+    "pipe" => ({"escape": "pipe.cancel" "arrowup": "pipe.history.open"} | upsert $"($mod)+enter" "pipe.run")
+    "pipe-history" => {"escape": "pipe-history.cancel"}
     _ => (keymap-main $ctx)
   }
 }
@@ -293,7 +306,11 @@ def bindings-for [mode: string ctx: record]: nothing -> list {
     ]
     "pipe" => [
       {action: "pipe.run" label: "run" keys: (glyphs [$m Enter])}
+      {action: "pipe.history.open" label: "history" keys: ["\u{2191}"]}
       {action: "pipe.cancel" label: "cancel" keys: (glyphs [Esc])}
+    ]
+    "pipe-history" => [
+      {action: "pipe-history.cancel" label: "close" keys: (glyphs [Esc])}
     ]
     _ => [
       {action: "clip.next" label: "next clip" keys: (glyphs [J])}
@@ -314,6 +331,11 @@ def panel-actions-for [mode: string ctx: record]: nothing -> list {
       {action: "set-mime.plain" label: "Plain text" keys: [] target: "mime" require: "always" groupStart: false}
       {action: "set-mime.markdown" label: "Markdown" keys: [] target: "mime" require: "always" groupStart: false}
     ]
+  }
+  if $mode == "pipe-history" {
+    return ($ctx.pipeHistory | enumerate | each {|it|
+      {action: $"history.load.($it.index)" label: $it.item keys: [] target: "history" require: "always" groupStart: false}
+    })
   }
   let trash_row = if $ctx.hasDeleted {
     [{action: "trash.open" label: "Trash" keys: (glyphs [Shift T]) target: "stack" require: "always"}]
@@ -370,6 +392,7 @@ def mode-name-for [mode: string ctx: record]: nothing -> string {
     "set-mime" => "Set content type"
     "trash" => "Trash"
     "pipe" => (if $ctx.pipeStackName == "" { "Pipe clip" } else { $"Pipe clip from ($ctx.pipeStackName)" })
+    "pipe-history" => "Pipe history"
     _ => {
       if $ctx.selectedStack == null { "Stacks" } else { ($ctx.selectedStack.name? | default "Untitled") }
     }
@@ -462,6 +485,7 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     isMac: $is_mac
     pipeClipId: $state.pipeClipId
     pipeStackName: $pipe_stack_name
+    pipeHistory: $state.pipeHistory
   }
   let actions = actions-for $state.mode $ctx
   let keymap = keymap-for $state.mode $ctx
@@ -494,8 +518,7 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     pipeClip: $pipe_clip
     pipeStackName: $pipe_stack_name
     pipeResult: $state.pipeResult
-    pipeHistoryJson: ($state.pipeHistory | to json -r)
-    pipeHistoryRecent: ($state.pipeHistory | first 5)
+    pipeText: $state.pipeText
     actions: ($actions | to json -r)
     keymap: ($keymap | to json -r)
   }
@@ -578,6 +601,10 @@ def design-state [variant: string]: nothing -> record {
     | update pipeClipId "c1"
     | update pipeResult {ok: false body: "" error: "Parse error: missing argument"}
     | update pipeHistory ["str upcase" "from json"])
+    "pipe-history" => ($base
+    | update mode "pipe-history"
+    | update pipeClipId "c1"
+    | update pipeHistory ["str upcase" "lines | length" "from json | get name" "where size > 1kb" "str trim"])
     _ => $base
   }
 }
@@ -600,7 +627,7 @@ def design-tile-html [variant: string --is-mac = true]: nothing -> string {
 }
 
 def design-page [--is-mac = true]: nothing -> any {
-  let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions" "set-mime" "trash" "pipe" "pipe-error"]
+  let variants = ["main" "main-empty-stack" "compose" "edit" "rename" "actions" "set-mime" "trash" "pipe" "pipe-error" "pipe-history"]
   (HTML
   (HEAD
   (META {charset: "utf-8"})
@@ -675,7 +702,6 @@ def index-page []: nothing -> any {
   (SCRIPT-ICONIFY)
   (SCRIPT {src: "/keys.js"})
   (SCRIPT {src: "/action-panel.js"})
-  (SCRIPT {src: "/pipe-history.js"})
   # Theme toggle handler. Lives at window.toggleTheme so the status-bar
   # button can call it inline; persists choice and updates the icon.
   (SCRIPT {
