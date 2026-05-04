@@ -146,9 +146,9 @@
     {% endif %}
   </article>
 
-  {% if mode == "actions" or mode == "set-mime" or mode == "pipe-history" %}
+  {% if mode == "actions" or mode == "set-mime" %}
   <div role="dialog" aria-modal="true" aria-label="{{ modeName }}"
-    data-close-topic="{% if mode == 'set-mime' %}set-mime.close{% elif mode == 'pipe-history' %}pipe.history.close{% else %}actions.close{% endif %}"
+    data-close-topic="{% if mode == 'set-mime' %}set-mime.close{% else %}actions.close{% endif %}"
     data-init="window.actionPanel && window.actionPanel.mount(el)"
     style="
     position: absolute;
@@ -297,7 +297,7 @@
   </div>
   {% endif %}
 
-  {% if mode == "pipe" %}
+  {% if mode == "pipe" or mode == "pipe-history" %}
   <div role="dialog" aria-modal="true" aria-label="Pipe clip" style="
     position: absolute;
     inset: 0;
@@ -312,6 +312,7 @@
       grid-template-rows: 1fr auto 1fr;
       min-height: 0;
       overflow: hidden;
+      position: relative;
     ">
       <section aria-label="Source clip" style="
         overflow: auto;
@@ -385,6 +386,67 @@
         <p style="color: var(--primary-7-dim);">Type a nushell pipeline above; the clip's body is `$in`.</p>
         {% endif %}
       </section>
+
+      {% if mode == "pipe-history" %}
+      <div role="dialog" aria-modal="true" aria-label="Pipe history"
+        data-close-topic="pipe.history.close"
+        data-init="window.actionPanel && window.actionPanel.mount(el)"
+        style="
+          position: absolute;
+          left: .5rem;
+          right: .5rem;
+          top: .5rem;
+          bottom: 50%;
+          margin-bottom: 0;
+          z-index: 50;
+          display: flex;
+          flex-direction: column;
+          background: var(--primary-7);
+          border: 1px solid var(--primary-7-dim);
+          border-radius: var(--border-radius-3);
+          box-shadow: 0 1rem 2.5rem rgba(0,0,0,0.5);
+          overflow: hidden;
+        "
+      >
+        <div style="padding: .6rem .85rem; border-bottom: 1px solid var(--primary-7-dim);">
+          <input
+            id="actions-filter"
+            type="text"
+            placeholder="Search history..."
+            spellcheck="false"
+            data-init="el.focus()"
+            style="
+              width: 100%;
+              font-size: var(--font-size--1);
+              line-height: var(--font-line-height-1);
+            "
+          />
+        </div>
+        <div class="action-rows" style="flex: 1; overflow: auto; padding: .35rem;">
+          {% for row in panelActions %}
+          <div
+            class="action-row{% if loop.first %} is-selected{% endif %}"
+            data-action="{{ row.action }}"
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding: .25rem .6rem;
+              border-radius: var(--border-radius-1);
+              cursor: pointer;
+              font-size: var(--font-size--1);
+              font-family: var(--font-mono);
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            "
+          >
+            <span style="overflow: hidden; text-overflow: ellipsis;">{{ row.label }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
   {% endif %}
