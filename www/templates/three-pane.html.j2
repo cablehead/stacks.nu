@@ -354,7 +354,8 @@
         placeholder="str upcase"
         spellcheck="false"
         autocomplete="off"
-        data-init="el.focus(); el.setSelectionRange(el.value.length, el.value.length)"
+        data-history="{{ pipeHistoryJson }}"
+        data-init="el.focus(); el.setSelectionRange(el.value.length, el.value.length); window.pipeHistory && window.pipeHistory.attach(el)"
         style="
           width: 100%;
           font-family: var(--font-mono);

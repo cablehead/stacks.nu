@@ -473,6 +473,22 @@ assert equal $at_thresh.selectedStackId "rs2" "threshold should pick top of last
 assert equal $at_thresh.selectionExplicit false "threshold should clear selectionExplicit"
 print "   ok"
 
+print "5s. pipe.command accumulates pipeHistory newest-first, capped at 100"
+let hist_state = [
+  {topic: "pipe.command" id: "ph1" hash: null meta: {source: "str upcase" clip_id: "c1"}}
+  {topic: "pipe.command" id: "ph2" hash: null meta: {source: "lines | length" clip_id: "c1"}}
+  {topic: "pipe.command" id: "ph3" hash: null meta: {source: "from json" clip_id: "c2"}}
+] | projection project
+assert equal $hist_state.pipeHistory ["from json" "lines | length" "str upcase"]
+
+# Cap test: 105 entries should keep only 100 (newest).
+let many = 1..105 | each {|i| {topic: "pipe.command" id: $"ph($i)" hash: null meta: {source: $"cmd ($i)"}} }
+let capped = $many | projection project
+assert equal ($capped.pipeHistory | length) 100
+assert equal ($capped.pipeHistory | first) "cmd 105"
+assert equal ($capped.pipeHistory | last) "cmd 6"
+print "   ok"
+
 print "5q. pipe.open / pipe.result / pipe.close cycle"
 let pipe_setup = [
   {topic: "stack.add" id: "ps1" hash: null meta: {name: "P" sort: "auto"}}

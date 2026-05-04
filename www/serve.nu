@@ -494,6 +494,7 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     pipeClip: $pipe_clip
     pipeStackName: $pipe_stack_name
     pipeResult: $state.pipeResult
+    pipeHistoryJson: ($state.pipeHistory | to json -r)
     actions: ($actions | to json -r)
     keymap: ($keymap | to json -r)
   }
@@ -665,6 +666,7 @@ def index-page []: nothing -> any {
   (SCRIPT-ICONIFY)
   (SCRIPT {src: "/keys.js"})
   (SCRIPT {src: "/action-panel.js"})
+  (SCRIPT {src: "/pipe-history.js"})
   # Theme toggle handler. Lives at window.toggleTheme so the status-bar
   # button can call it inline; persists choice and updates the icon.
   (SCRIPT {
@@ -928,6 +930,11 @@ bootstrap-if-empty
       let frame = .get $ctx.clip_id
       if $frame == null {
         return ("Not Found" | metadata set { merge {'http.response': {status: 404}} })
+      }
+      # Record the pipeline source as a persistent frame so it shows up in
+      # arrow-key history. The actual run + result follows below.
+      if not ($pipeline | str trim | is-empty) {
+        .append pipe.command --meta {source: $pipeline clip_id: $ctx.clip_id} | ignore
       }
       let body = if $frame.hash? == null { "" } else { try { .cas $frame.hash } catch { "" } }
       let outcome = try {
