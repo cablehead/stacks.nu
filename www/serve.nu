@@ -474,10 +474,18 @@ def view-model [state: record --is-mac = true]: nothing -> record {
         let parent_stack = $state.stacks | where id == $parent_id | get -i 0
         let parent_in_trash = $state.deleted | any {|e| $e.kind == "stack" and $e.snapshot.stack.id == $parent_id }
         let parent_alive = ($parent_stack != null) and (not $parent_in_trash)
-        let body = if $entry.snapshot.clip.hash == null { "" } else {
+        # Only fetch + str-process text bodies. Binary clips (image/*, ...)
+        # would crash the str pipeline.
+        let mime = $entry.snapshot.clip.mime_type? | default "text/plain"
+        let is_text = ($mime | str starts-with "text/") or $mime == "application/json"
+        let body = if $entry.snapshot.clip.hash == null or (not $is_text) { "" } else {
           try { .cas $entry.snapshot.clip.hash } catch { "" }
         }
-        let preview = ($body | str replace -ar "\\s+" " " | str trim | str substring 0..120)
+        let preview = if $is_text {
+          $body | str replace -ar "\\s+" " " | str trim | str substring 0..120
+        } else {
+          $"\(($mime)\)"
+        }
         {
           frame_id: $entry.frame_id
           kind: "clip"

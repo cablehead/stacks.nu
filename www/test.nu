@@ -672,6 +672,40 @@ assert equal $inline.body "Inline preview text."
 assert equal $inline.preview "Inline preview text."
 print "   ok"
 
+print "8c. trash list builder skips text ops on binary deleted-clip bodies"
+# Same bug as 8b but in view-model's deleted-items loop. Repro: delete an
+# image clip, then trigger a render that walks state.deleted.
+'{"name":"BinTrash","sort":"auto"}' | do $handler {
+  method: "POST"
+  path: "/stacks"
+  headers: {}
+  query: {}
+}
+let bs = .cat | where topic == "stack.add" and meta.name == "BinTrash" | last
+0x[89 50 4E 47 0D 0A 1A 0A] | do $handler {
+  method: "POST"
+  path: $"/stacks/($bs.id)/clips"
+  headers: {}
+  query: {mime_type: "image/png"}
+}
+let bin_clip = .cat | where topic == "clip.add" and meta.stack_id == $bs.id | last
+do $handler {
+  method: "DELETE"
+  path: $"/clips/($bin_clip.id)"
+  headers: {}
+  query: {}
+}
+# /api/state walks the projection (which doesn't trip the bug) but the
+# render path does. Hit /updates is awkward in tests; instead view-model
+# is internal -- exercise it via `source ./serve.nu` and a hand-built call.
+let s = .cat | projection project
+source ($script_dir | path join serve.nu)
+let vm = view-model $s
+# A clip kind entry should exist with the just-deleted bin_clip
+let entries = $vm.deletedItems | where frame_id =~ "" # all
+assert ($entries | any {|e| $e.kind == "clip" }) "deleted list contains the clip"
+print "   ok"
+
 print "8b. hydrate-clip handles binary CAS body without crashing"
 # Bug: str-* operations called on binary input (image bytes from CAS)
 # raised "Input type not supported." Repro by stuffing binary into the
