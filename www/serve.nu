@@ -168,7 +168,18 @@ def actions-for [mode: string ctx: record]: nothing -> record {
       })
     }
     "pipe" => {
-      "pipe.run": (js-fetch $"/pipe/run/($ctx.pipeClipId)" --body "document.querySelector('#pipe-text').value")
+      # Mod+Enter: when the history popup is open with a highlighted row,
+      # treat it as "accept this row and run it" -- POST the chosen source
+      # directly, then fire history.select so the server-side state aligns
+      # (popup closes, pipeText updates). When the popup is closed, run
+      # whatever's in the input.
+      "pipe.run": (if $ctx.pipeHistoryOpen and (not ($ctx.pipeFiltered | is-empty)) {
+        let idx = [$ctx.pipeHistoryCursor (($ctx.pipeFiltered | length) - 1)] | math min
+        let chosen = $ctx.pipeFiltered | get $idx
+        js-fetch $"/pipe/run/($ctx.pipeClipId)" --body ($chosen | to json -r) --then (js-impulse "pipe.history.select" {})
+      } else {
+        js-fetch $"/pipe/run/($ctx.pipeClipId)" --body "document.querySelector('#pipe-text').value"
+      })
       "pipe.cancel": (js-impulse "pipe.close" {})
       "pipe.history.open": (js-impulse "pipe.history.open" {})
       "pipe.history.close": (js-impulse "pipe.history.close" {})
@@ -500,6 +511,8 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     pipeClipId: $state.pipeClipId
     pipeStackName: $pipe_stack_name
     pipeHistoryOpen: $state.pipeHistoryOpen
+    pipeFiltered: (projection pipe-filtered $state)
+    pipeHistoryCursor: $state.pipeHistoryCursor
   }
   let actions = actions-for $state.mode $ctx
   let keymap = keymap-for $state.mode $ctx
