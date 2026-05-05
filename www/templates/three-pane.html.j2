@@ -358,7 +358,7 @@
         spellcheck="false"
         autocomplete="off"
         data-bind="pipeText"
-        data-on-input__debounce.100ms="@post('/pipe/text')"
+        data-on:input__debounce.100ms="@post('/pipe/text')"
         data-init="el.focus(); el.setSelectionRange(el.value.length, el.value.length)"
         style="
           width: 100%;
