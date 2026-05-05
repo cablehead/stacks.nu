@@ -105,7 +105,7 @@ export def apply-frame [state: record frame: record]: nothing -> record {
     "pipe.open" => ($state | update mode "pipe" | update pipeClipId ($frame.meta?.clip_id?) | update pipeResult null | update pipeText "" | update pipeHistoryOpen false | update pipeHistoryCursor 0)
     "pipe.close" => ($state | update mode "main" | update pipeClipId null | update pipeResult null | update pipeText "" | update pipeHistoryOpen false | update pipeHistoryCursor 0)
     "pipe.result" => ($state | update pipeResult {ok: ($frame.meta?.ok? | default false) body: ($frame.meta?.body? | default "") error: ($frame.meta?.error?)})
-    "pipe.command" => ($state | update pipeHistory ([($frame.meta?.source? | default "")] | append $state.pipeHistory | first 100))
+    "pipe.command" => (pipe-command-apply $state $frame)
     # User typed: server gets a fresh value from the bound signal. Auto-
     # open the popup so the user sees matches immediately (the template
     # also gates on pipeFiltered being non-empty, so the popup hides
@@ -115,7 +115,7 @@ export def apply-frame [state: record frame: record]: nothing -> record {
     "pipe.history.open" => ($state | update pipeHistoryOpen true | update pipeHistoryCursor 0)
     "pipe.history.close" => ($state | update pipeHistoryOpen false)
     "pipe.history.cursor" => (pipe-cursor-move $state $frame)
-    "pipe.history.select" => (pipe-history-select $state)
+    "pipe.history.select" => (pipe-history-select $state $frame)
     _ => $state
   }
   remember-cursor $s | update frameId ($frame.id? | default $s.frameId)
@@ -411,14 +411,37 @@ def pipe-cursor-move [state: record frame: record]: nothing -> record {
   $state | update pipeHistoryCursor $next
 }
 
+# pipe.command apply arm. De-dup consecutive same-source entries so
+# re-running the same pipeline doesn't bloat history. Empty source ignored.
+def pipe-command-apply [state: record frame: record]: nothing -> record {
+  let s = $frame.meta?.source? | default ""
+  if ($s | is-empty) or ($state.pipeHistory | get -i 0) == $s {
+    $state
+  } else {
+    $state | update pipeHistory ([$s] | append $state.pipeHistory | first 100)
+  }
+}
+
 # Enter on a highlighted history row: replace input with that source,
 # close popup. The signal patch on the rendered SSE event syncs the
 # bound input.
-def pipe-history-select [state: record]: nothing -> record {
-  let filtered = pipe-filtered $state
-  if ($filtered | is-empty) { return ($state | update pipeHistoryOpen false) }
-  let idx = ([$state.pipeHistoryCursor (($filtered | length) - 1)] | math min)
-  let chosen = $filtered | get $idx
+#
+# meta.source overrides the cursor-derived choice. The Mod+Enter flow
+# uses this: the action reads the highlighted row's text from the DOM
+# and passes it explicitly, sidestepping the race where /pipe/run
+# appends a pipe.command frame that reorders history before this fires.
+def pipe-history-select [state: record frame: record]: nothing -> record {
+  let explicit = $frame.meta?.source?
+  let chosen = if $explicit != null {
+    $explicit
+  } else {
+    let filtered = pipe-filtered $state
+    if ($filtered | is-empty) {
+      return ($state | update pipeHistoryOpen false)
+    }
+    let idx = ([$state.pipeHistoryCursor (($filtered | length) - 1)] | math min)
+    $filtered | get $idx
+  }
   $state
   | update pipeText $chosen
   | update pipeHistoryOpen false

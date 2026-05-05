@@ -526,6 +526,40 @@ let after_many = $setup | append [
 assert equal $after_many.pipeHistoryCursor 2 "clamped at length-1"
 print "   ok"
 
+print "5v0. pipe.history.select with explicit source overrides cursor (mod+enter race)"
+# After Mod+Enter on a history row: /pipe/run appends pipe.command which
+# shifts history; the chained select carries the chosen text explicitly so
+# it doesn't read filtered[cursor] (which now points at the wrong entry).
+let race = [
+  {topic: "pipe.command" id: "pc1" hash: null meta: {source: "str upcase"}}
+  {topic: "pipe.command" id: "pc2" hash: null meta: {source: "lines | length"}}
+  {topic: "pipe.open" id: "po" hash: null meta: {clip_id: "c"}}
+  {topic: "pipe.history.open" id: "pho" hash: null meta: {}}
+  {topic: "pipe.history.cursor" id: "phc" hash: null meta: {index: 1}} # cursor on "str upcase"
+  # /pipe/run records the command (shifts history)
+  {topic: "pipe.command" id: "pc3" hash: null meta: {source: "str upcase"}}
+  # Chained select carries source explicitly
+  {topic: "pipe.history.select" id: "phs" hash: null meta: {source: "str upcase"}}
+] | projection project
+assert equal $race.pipeText "str upcase"
+print "   ok"
+
+print "5v1. pipe.command de-dups consecutive same-source entries"
+let dedup = [
+  {topic: "pipe.command" id: "p1" hash: null meta: {source: "x"}}
+  {topic: "pipe.command" id: "p2" hash: null meta: {source: "x"}}
+  {topic: "pipe.command" id: "p3" hash: null meta: {source: "x"}}
+] | projection project
+assert equal $dedup.pipeHistory ["x"]
+
+let no_dedup = [
+  {topic: "pipe.command" id: "p1" hash: null meta: {source: "x"}}
+  {topic: "pipe.command" id: "p2" hash: null meta: {source: "y"}}
+  {topic: "pipe.command" id: "p3" hash: null meta: {source: "x"}}
+] | projection project
+assert equal $no_dedup.pipeHistory ["x" "y" "x"] "non-consecutive duplicates kept"
+print "   ok"
+
 print "5v. pipe.history.select sets pipeText to filtered[cursor]"
 let selected = $setup | append [
     {topic: "pipe.text" id: "pt1" hash: null meta: {value: "ir"}}
