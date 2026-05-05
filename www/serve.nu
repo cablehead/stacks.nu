@@ -903,6 +903,19 @@ bootstrap-if-empty
     (route {method: "GET" path: "/shots"} {|req ctx| shots-page })
     (route {method: "GET" path: "/design"} {|req ctx| design-page --is-mac=(is-mac $req) })
 
+    # Lightweight synchronous state probe -- returns the projection's
+    # cursor info as JSON. Used by tooling (e.g. scripts/shoot-design.sh)
+    # that needs the currently-selected stack id without subscribing to
+    # the streaming /updates SSE.
+    (route {method: "GET" path: "/api/state"} {|req ctx|
+      let s = .cat | projection project
+      {
+        selectedStackId: $s.selectedStackId
+        selectedClipId: $s.selectedClipId
+        stackIds: ($s.stacks | get id)
+      }
+    })
+
     (route {method: "GET" path: "/updates"} {|req ctx|
       let is_mac = is-mac $req
       .cat -f

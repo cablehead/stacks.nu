@@ -40,32 +40,12 @@ await page.screenshot({ path: PNG, fullPage: true });
 await browser.close();
 console.log(`shot: ${PNG} (${titles.length} tiles)`);
 
-// Find the live store's currently-selected stack via the /updates SSE patch.
-// One event is enough -- the rendered <main> has data-actions JSON whose
-// stack.delete URL contains the id.
-const ctrl = new AbortController();
-const t = setTimeout(() => ctrl.abort(), 3000);
-const resp = await fetch(`${BASE}/updates`, { signal: ctrl.signal }).catch(() => null);
-clearTimeout(t);
-if (!resp) throw new Error("could not subscribe to /updates");
-const decoder = new TextDecoder();
-let buf = "";
-let stackId = null;
-const reader = resp.body.getReader();
-while (true) {
-  const { value, done } = await reader.read().catch(() => ({ done: true }));
-  if (done) break;
-  buf += decoder.decode(value);
-  const decoded = buf
-    .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/\\\"/g, '"');
-  // Try sort URL first (only present when a stack is selected); fall back
-  // to any /stacks/<id> URL in the rendered HTML.
-  const m = decoded.match(/\/stacks\/([a-z0-9]+)\/sort\/(?:auto|manual)/i)
-    || decoded.match(/\/stacks\/([a-z0-9]+)\/clips/i)
-    || decoded.match(/\/stacks\/([a-z0-9]+)/i);
-  if (m) { stackId = m[1]; ctrl.abort(); break; }
-}
-if (!stackId) throw new Error("no selected stack found in /updates");
+// Find the live store's currently-selected stack via /api/state.
+const stateResp = await fetch(`${BASE}/api/state`);
+if (!stateResp.ok) throw new Error(`/api/state -> ${stateResp.status}`);
+const state = await stateResp.json();
+const stackId = state.selectedStackId || state.stackIds?.[0];
+if (!stackId) throw new Error("no stack to post into; create one first");
 console.log(`stack: ${stackId}`);
 
 // POST the PNG as a clip body.
