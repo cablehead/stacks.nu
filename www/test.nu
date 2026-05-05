@@ -654,6 +654,29 @@ assert equal $stack.name "Inbox"
 assert equal ($stack.clips | length) 1
 print "   ok"
 
+print "8b. hydrate-clip handles binary CAS body without crashing"
+# Bug: str-* operations called on binary input (image bytes from CAS)
+# raised "Input type not supported." Repro by stuffing binary into the
+# store, then asking hydrate-clip to resolve it.
+0x[89 50 4E 47 0D 0A 1A 0A] | do $handler {
+  method: "POST"
+  path: $"/stacks/($stack_id)/clips"
+  headers: {}
+  query: {mime_type: "image/png"}
+}
+let img_frame = .cat | where topic == "clip.add" and meta.mime_type == "image/png" | last
+assert ($img_frame.hash != null) "image body should be CAS-stored"
+
+# `source ./serve.nu` brings hydrate-clip into scope so we can exercise it
+# directly with a record shaped like projection's clip output.
+source ./serve.nu
+let img_clip = {id: $img_frame.id hash: $img_frame.hash mime_type: "image/png" position: null lastTouched: $img_frame.id versions: [$img_frame.id]}
+let hydrated = hydrate-clip $img_clip
+assert equal $hydrated.id $img_frame.id
+# Preview shouldn't try to text-process binary bytes.
+assert (($hydrated.preview | describe) =~ "string") "preview is a string"
+print "   ok"
+
 print "9. stacks module: meta builders produce the documented shapes"
 let a = stack add "Inbox" --sort manual
 assert equal $a ({topic: "stack.add" ttl: "forever" meta: {name: "Inbox" sort: "manual"}})

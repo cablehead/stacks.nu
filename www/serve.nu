@@ -19,11 +19,20 @@ use ./projection.nu
 
 # Decorate a clip with a one-line preview and (when small) the inlined body.
 def hydrate-clip [clip: record]: nothing -> record {
-  let body = if $clip.hash == null { "" } else {
+  let mime = $clip.mime_type? | default "text/plain"
+  # Only fetch + text-process bodies that are actually text. Binary blobs
+  # (image/*, application/octet-stream, ...) would crash str-* commands and
+  # are rendered via /clips/:id/content, not inlined into the view-model.
+  let is_text = ($mime | str starts-with "text/") or $mime == "application/json"
+  let body = if $clip.hash == null or (not $is_text) { "" } else {
     try { .cas $clip.hash } catch { "" }
   }
-  let preview = $body | str replace -ar "\\s+" " " | str trim | str substring 0..120
-  let body_html = if $clip.mime_type? == "text/markdown" {
+  let preview = if $is_text {
+    $body | str replace -ar "\\s+" " " | str trim | str substring 0..120
+  } else {
+    $"\(($mime)\)"
+  }
+  let body_html = if $mime == "text/markdown" {
     try { $body | .md | get __html } catch { "" }
   } else { "" }
   $clip | insert preview $preview | insert body $body | insert bodyHtml $body_html
