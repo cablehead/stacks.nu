@@ -299,7 +299,7 @@
 
   {% if mode == "pipe" %}
   <div role="dialog" aria-modal="true" aria-label="Pipe clip"
-    data-signals='{pipeText: {{ pipeText | tojson | safe }}}'
+    data-signals='{pipeText__ifmissing: {{ pipeText | tojson | safe }}}'
     style="
     position: absolute;
     inset: 0;

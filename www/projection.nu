@@ -506,7 +506,10 @@ export def project-stream []: any -> any {
     let new_value = apply-frame $state.value $frame | reconcile-selection
     let next = {value: $new_value live: $state.live}
     if $state.live {
-      {next: $next out: $new_value}
+      # Tag the emitted state with the frame topic that produced it so
+      # render-event can choose to emit signal patches for select frames
+      # (e.g. pipe.history.select wants to overwrite the bound input).
+      {next: $next out: ($new_value | upsert _lastTopic $frame.topic)}
     } else {
       {next: $next}
     }

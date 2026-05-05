@@ -554,10 +554,25 @@ def view-model [state: record --is-mac = true]: nothing -> record {
   }
 }
 
-def render-event [state: record --is-mac = true]: nothing -> record {
+def render-event [state: record --is-mac = true]: nothing -> list {
   let html = view-model $state --is-mac=$is_mac | .mj ($script_dir | path join "templates/three-pane.html.j2")
   let elements = $html | lines | each {|l| $"elements ($l)" } | str join "\n"
-  {event: "datastar-patch-elements" data: $"selector main\n($elements)"}
+  let html_event = {event: "datastar-patch-elements" data: $"selector main\n($elements)"}
+  # Emit a forced signal patch when pipeText was just set server-side
+  # (history.select / pipe.open / pipe.close). Typing fires pipe.text,
+  # which we deliberately exclude so the user's keystrokes aren't
+  # clobbered by the server's stale value.
+  let force_signal = ($state._lastTopic? | default "") in [
+    "pipe.history.select"
+    "pipe.open"
+    "pipe.close"
+  ]
+  if $force_signal {
+    let signal_event = {pipeText: $state.pipeText} | to datastar-patch-signals
+    [$signal_event $html_event]
+  } else {
+    [$html_event]
+  }
 }
 
 # Synthetic state for the /design page. Same shape projection produces, but
@@ -850,6 +865,7 @@ bootstrap-if-empty
       .cat -f
       | projection project-stream
       | each {|s| render-event $s --is-mac=$is_mac }
+      | flatten
       | to sse
     })
 
