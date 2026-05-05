@@ -24,7 +24,13 @@ def hydrate-clip [clip: record]: nothing -> record {
   # (image/*, application/octet-stream, ...) would crash str-* commands and
   # are rendered via /clips/:id/content, not inlined into the view-model.
   let is_text = ($mime | str starts-with "text/") or $mime == "application/json"
-  let body = if $clip.hash == null or (not $is_text) { "" } else {
+  # An inline `body` on the input record (e.g. from /design's synthetic
+  # state, where hashes don't resolve in CAS) wins over the CAS read.
+  let body = if $clip.body? != null and $clip.body? != "" {
+    $clip.body
+  } else if $clip.hash == null or (not $is_text) {
+    ""
+  } else {
     try { .cas $clip.hash } catch { "" }
   }
   let preview = if $is_text {
@@ -35,7 +41,7 @@ def hydrate-clip [clip: record]: nothing -> record {
   let body_html = if $mime == "text/markdown" {
     try { $body | .md | get __html } catch { "" }
   } else { "" }
-  $clip | insert preview $preview | insert body $body | insert bodyHtml $body_html
+  $clip | upsert preview $preview | upsert body $body | upsert bodyHtml $body_html
 }
 
 # Apple-symbol display for special keys; letters stay as-is. Used by the
@@ -590,8 +596,24 @@ def design-state [variant: string]: nothing -> record {
       sort: "auto"
       lastTouched: "f3"
       clips: [
-        {id: "c1" hash: "fake-h1" mime_type: "text/plain" position: null lastTouched: "c1" versions: ["c1"]}
-        {id: "c2" hash: "fake-h2" mime_type: "text/plain" position: null lastTouched: "c2" versions: ["c2"]}
+        {
+          id: "c1"
+          hash: "fake-h1"
+          mime_type: "text/plain"
+          position: null
+          lastTouched: "c1"
+          versions: ["c1"]
+          body: "We invent the future a few times a year, in the kitchen, around the table.\nThe rest is execution."
+        }
+        {
+          id: "c2"
+          hash: "fake-h2"
+          mime_type: "text/plain"
+          position: null
+          lastTouched: "c2"
+          versions: ["c2"]
+          body: "ssh deploy@vm 'tail -f /var/log/app.log | grep -i error'"
+        }
       ]
     }
     {
@@ -600,8 +622,24 @@ def design-state [variant: string]: nothing -> record {
       sort: "manual"
       lastTouched: "c4"
       clips: [
-        {id: "c3" hash: "fake-h3" mime_type: "text/plain" position: "a" lastTouched: "c3" versions: ["c3"]}
-        {id: "c4" hash: "fake-h4" mime_type: "text/plain" position: "b" lastTouched: "c4" versions: ["c4"]}
+        {
+          id: "c3"
+          hash: "fake-h3"
+          mime_type: "text/plain"
+          position: "a"
+          lastTouched: "c3"
+          versions: ["c3"]
+          body: "ls **/*.nu | each {|f| {file: $f.name lines: (open $f.name | lines | length)}}"
+        }
+        {
+          id: "c4"
+          hash: "fake-h4"
+          mime_type: "text/plain"
+          position: "b"
+          lastTouched: "c4"
+          versions: ["c4"]
+          body: "https://github.com/cablehead/xs"
+        }
       ]
     }
     {id: "s3" name: "Untitled" sort: "auto" lastTouched: "s3" clips: []}

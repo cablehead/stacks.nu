@@ -654,6 +654,24 @@ assert equal $stack.name "Inbox"
 assert equal ($stack.clips | length) 1
 print "   ok"
 
+print "8a. hydrate-clip uses inline `body` field when present (design-page synthetic clips)"
+# The /design page builds synthetic clip records with fake hashes that don't
+# resolve in CAS. Without a fallback the preview pane is empty -- the user
+# noticed this in screenshots. Allow an inline `body` field to override.
+source ./serve.nu
+let inline = hydrate-clip {
+  id: "syn-c"
+  hash: "fake-no-such-hash"
+  mime_type: "text/plain"
+  position: null
+  lastTouched: "syn-c"
+  versions: ["syn-c"]
+  body: "Inline preview text."
+}
+assert equal $inline.body "Inline preview text."
+assert equal $inline.preview "Inline preview text."
+print "   ok"
+
 print "8b. hydrate-clip handles binary CAS body without crashing"
 # Bug: str-* operations called on binary input (image bytes from CAS)
 # raised "Input type not supported." Repro by stuffing binary into the
