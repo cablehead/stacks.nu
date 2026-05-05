@@ -17,8 +17,11 @@ const browser = await chromium.launch({
   executablePath: "/usr/bin/chromium",
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });
-// Tall viewport so all iframes are in-viewport at load (no lazy loading).
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 5500 } });
+// Wide enough for the design grid (minmax(40rem, 1fr)) to lay tiles 2-up.
+// Tall enough that all iframes are in-viewport at load (no lazy loading).
+const W = parseInt(process.env.W || "1500", 10);
+const H = parseInt(process.env.H || "3500", 10);
+const ctx = await browser.newContext({ viewport: { width: W, height: H } });
 const page = await ctx.newPage();
 await page.goto(`${BASE}/design`, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(1000);
@@ -38,7 +41,19 @@ for (const t of titles) {
 await page.waitForTimeout(500);
 await page.screenshot({ path: PNG, fullPage: true });
 await browser.close();
-console.log(`shot: ${PNG} (${titles.length} tiles)`);
+console.log(`shot: ${PNG} (${titles.length} tiles, ${W}x${H} viewport)`);
+
+// Optional resize: TARGET_W shrinks the image to that width before posting.
+// Useful for getting a 2-up render at a comfortable in-app preview size --
+// shoot wide (so the grid lays out 2-up), resize down for storage.
+const targetW = parseInt(process.env.TARGET_W || "0", 10);
+let outPath = PNG;
+if (targetW > 0 && targetW < W) {
+  const sharp = (await import("sharp")).default;
+  outPath = "/tmp/stacks-design-resized.png";
+  await sharp(PNG).resize({ width: targetW }).toFile(outPath);
+  console.log(`resized: ${outPath} (width ${targetW})`);
+}
 
 // Find the live store's currently-selected stack via /api/state.
 const stateResp = await fetch(`${BASE}/api/state`);
@@ -48,8 +63,8 @@ const stackId = state.selectedStackId || state.stackIds?.[0];
 if (!stackId) throw new Error("no stack to post into; create one first");
 console.log(`stack: ${stackId}`);
 
-// POST the PNG as a clip body.
-const png = await import("node:fs").then((fs) => fs.readFileSync(PNG));
+// POST the (possibly resized) PNG as a clip body.
+const png = await import("node:fs").then((fs) => fs.readFileSync(outPath));
 const post = await fetch(`${BASE}/stacks/${stackId}/clips?mime_type=image/png`, {
   method: "POST",
   headers: { "content-type": "image/png" },
