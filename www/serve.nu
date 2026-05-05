@@ -131,6 +131,7 @@ const IMPULSE_TOPICS = [
   "pipe.close"
   "pipe.history.open"
   "pipe.history.close"
+  "pipe.history.cursor"
   "pipe.history.select"
 ]
 
@@ -169,16 +170,12 @@ def actions-for [mode: string ctx: record]: nothing -> record {
     "pipe" => {
       "pipe.run": (js-fetch $"/pipe/run/($ctx.pipeClipId)" --body "document.querySelector('#pipe-text').value")
       "pipe.cancel": (js-impulse "pipe.close" {})
-      # The history-open action captures the user's currently-typed text so
-      # cancelling the popup restores it. Custom JS because js-impulse takes
-      # a static meta record; here meta.current is dynamic (DOM read).
-      "pipe.history.open": "window.actions.impulse('pipe.history.open', {current: document.querySelector('#pipe-text').value})"
+      "pipe.history.open": (js-impulse "pipe.history.open" {})
+      "pipe.history.close": (js-impulse "pipe.history.close" {})
+      "pipe.history.up": (js-impulse "pipe.history.cursor" {action: "up"})
+      "pipe.history.down": (js-impulse "pipe.history.cursor" {action: "down"})
+      "pipe.history.select": (js-impulse "pipe.history.select" {})
     }
-    "pipe-history" => ($ctx.pipeHistory
-    | enumerate
-    | reduce -f {"pipe-history.cancel": (js-impulse "pipe.history.close" {})} {|it acc|
-      $acc | upsert $"history.load.($it.index)" (js-impulse "pipe.history.select" {source: $it.item})
-    })
     _ => (actions-main $ctx)
   }
 }
@@ -239,8 +236,18 @@ def keymap-for [mode: string ctx: record]: nothing -> record {
       "enter": "restore.do"
       "u": "restore.do"
     }
-    "pipe" => ({"escape": "pipe.cancel" "arrowup": "pipe.history.open"} | upsert $"($mod)+enter" "pipe.run")
-    "pipe-history" => {"escape": "pipe-history.cancel"}
+    "pipe" => (if $ctx.pipeHistoryOpen {
+      # Popup open: arrows navigate rows, Enter selects, Esc closes popup.
+      # Mod+Enter still runs the input regardless.
+      {
+        "escape": "pipe.history.close"
+        "arrowup": "pipe.history.up"
+        "arrowdown": "pipe.history.down"
+        "enter": "pipe.history.select"
+      } | upsert $"($mod)+enter" "pipe.run"
+    } else {
+      {"escape": "pipe.cancel" "arrowup": "pipe.history.open"} | upsert $"($mod)+enter" "pipe.run"
+    })
     _ => (keymap-main $ctx)
   }
 }
@@ -304,14 +311,19 @@ def bindings-for [mode: string ctx: record]: nothing -> list {
       {action: "deleted.prev" label: "prev" keys: (glyphs [K])}
       {action: "trash.cancel" label: "close" keys: (glyphs [Esc])}
     ]
-    "pipe" => [
-      {action: "pipe.run" label: "run" keys: (glyphs [$m Enter])}
-      {action: "pipe.history.open" label: "history" keys: ["\u{2191}"]}
-      {action: "pipe.cancel" label: "cancel" keys: (glyphs [Esc])}
-    ]
-    "pipe-history" => [
-      {action: "pipe-history.cancel" label: "close" keys: (glyphs [Esc])}
-    ]
+    "pipe" => (if $ctx.pipeHistoryOpen {
+      [
+        {action: "pipe.history.select" label: "select" keys: (glyphs [Enter])}
+        {action: "pipe.history.close" label: "close" keys: (glyphs [Esc])}
+        {action: "pipe.run" label: "run" keys: (glyphs [$m Enter])}
+      ]
+    } else {
+      [
+        {action: "pipe.run" label: "run" keys: (glyphs [$m Enter])}
+        {action: "pipe.history.open" label: "history" keys: ["\u{2191}"]}
+        {action: "pipe.cancel" label: "cancel" keys: (glyphs [Esc])}
+      ]
+    })
     _ => [
       {action: "clip.next" label: "next clip" keys: (glyphs [J])}
       {action: "clip.prev" label: "prev clip" keys: (glyphs [K])}
@@ -331,11 +343,6 @@ def panel-actions-for [mode: string ctx: record]: nothing -> list {
       {action: "set-mime.plain" label: "Plain text" keys: [] target: "mime" require: "always" groupStart: false}
       {action: "set-mime.markdown" label: "Markdown" keys: [] target: "mime" require: "always" groupStart: false}
     ]
-  }
-  if $mode == "pipe-history" {
-    return ($ctx.pipeHistory | enumerate | each {|it|
-      {action: $"history.load.($it.index)" label: $it.item keys: [] target: "history" require: "always" groupStart: false}
-    })
   }
   let trash_row = if $ctx.hasDeleted {
     [{action: "trash.open" label: "Trash" keys: (glyphs [Shift T]) target: "stack" require: "always"}]
@@ -392,7 +399,6 @@ def mode-name-for [mode: string ctx: record]: nothing -> string {
     "set-mime" => "Set content type"
     "trash" => "Trash"
     "pipe" => (if $ctx.pipeStackName == "" { "Pipe clip" } else { $"Pipe clip from ($ctx.pipeStackName)" })
-    "pipe-history" => "Pipe history"
     _ => {
       if $ctx.selectedStack == null { "Stacks" } else { ($ctx.selectedStack.name? | default "Untitled") }
     }
@@ -485,7 +491,7 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     isMac: $is_mac
     pipeClipId: $state.pipeClipId
     pipeStackName: $pipe_stack_name
-    pipeHistory: $state.pipeHistory
+    pipeHistoryOpen: $state.pipeHistoryOpen
   }
   let actions = actions-for $state.mode $ctx
   let keymap = keymap-for $state.mode $ctx
@@ -519,6 +525,9 @@ def view-model [state: record --is-mac = true]: nothing -> record {
     pipeStackName: $pipe_stack_name
     pipeResult: $state.pipeResult
     pipeText: $state.pipeText
+    pipeHistoryOpen: $state.pipeHistoryOpen
+    pipeHistoryCursor: $state.pipeHistoryCursor
+    pipeFiltered: (projection pipe-filtered $state)
     actions: ($actions | to json -r)
     keymap: ($keymap | to json -r)
   }
@@ -602,8 +611,10 @@ def design-state [variant: string]: nothing -> record {
     | update pipeResult {ok: false body: "" error: "Parse error: missing argument"}
     | update pipeHistory ["str upcase" "from json"])
     "pipe-history" => ($base
-    | update mode "pipe-history"
+    | update mode "pipe"
     | update pipeClipId "c1"
+    | update pipeHistoryOpen true
+    | update pipeHistoryCursor 0
     | update pipeHistory ["str upcase" "lines | length" "from json | get name" "where size > 1kb" "str trim"])
     _ => $base
   }
@@ -960,6 +971,16 @@ bootstrap-if-empty
     # Run a user-supplied nushell pipeline against the clip's body. Result
     # (or error) is recorded as an ephemeral pipe.result frame; the
     # projection picks it up and the SSE stream re-renders the result pane.
+    # Bound signal sync. The input has data-bind="pipeText" so each typing
+    # event POSTs the signals payload here; we extract the value and append
+    # an ephemeral pipe.text frame. Projection fold updates pipeText, the
+    # popup re-renders with the filtered list.
+    (route {method: "POST" path: "/pipe/text"} {|req ctx|
+      let signals = $in | from datastar-signals $req
+      let value = $signals.pipeText? | default ""
+      .append pipe.text --meta {value: $value} --ttl ephemeral | ignore
+      "" | metadata set { merge {'http.response': {status: 204}} }
+    })
     (route {method: "POST" path-matches: "/pipe/run/:clip_id"} {|req ctx|
       let pipeline = $in
       let frame = .get $ctx.clip_id

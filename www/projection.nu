@@ -40,7 +40,7 @@
 # float to the top), manual = position asc.
 
 export def empty []: nothing -> record {
-  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null setMimeClipId: null clipCursors: {} selectionExplicit: false frameId: null deleted: [] selectedDeletedFrameId: null pipeClipId: null pipeResult: null pipeHistory: [] pipeText: ""}
+  {stacks: [] selectedStackId: null selectedClipId: null mode: "main" composeStackId: null editClipId: null renameStackId: null setMimeClipId: null clipCursors: {} selectionExplicit: false frameId: null deleted: [] selectedDeletedFrameId: null pipeClipId: null pipeResult: null pipeHistory: [] pipeText: "" pipeHistoryOpen: false pipeHistoryCursor: 0}
 }
 
 # Pick the id that occupies the same slot after `removed` is dropped from
@@ -102,13 +102,18 @@ export def apply-frame [state: record frame: record]: nothing -> record {
     "deleted.select" => (deleted-select $state $frame)
     "clip.restore" => (clip-restore $state $frame)
     "stack.restore" => (stack-restore $state $frame)
-    "pipe.open" => ($state | update mode "pipe" | update pipeClipId ($frame.meta?.clip_id?) | update pipeResult null | update pipeText "")
-    "pipe.close" => ($state | update mode "main" | update pipeClipId null | update pipeResult null | update pipeText "")
+    "pipe.open" => ($state | update mode "pipe" | update pipeClipId ($frame.meta?.clip_id?) | update pipeResult null | update pipeText "" | update pipeHistoryOpen false | update pipeHistoryCursor 0)
+    "pipe.close" => ($state | update mode "main" | update pipeClipId null | update pipeResult null | update pipeText "" | update pipeHistoryOpen false | update pipeHistoryCursor 0)
     "pipe.result" => ($state | update pipeResult {ok: ($frame.meta?.ok? | default false) body: ($frame.meta?.body? | default "") error: ($frame.meta?.error?)})
     "pipe.command" => ($state | update pipeHistory ([($frame.meta?.source? | default "")] | append $state.pipeHistory | first 100))
-    "pipe.history.open" => ($state | update mode "pipe-history" | update pipeText ($frame.meta?.current? | default $state.pipeText))
-    "pipe.history.close" => ($state | update mode "pipe")
-    "pipe.history.select" => ($state | update mode "pipe" | update pipeText ($frame.meta?.source? | default $state.pipeText))
+    # User typed: server gets a fresh value from the bound signal. Reset
+    # cursor to 0 (bottom = newest match). Don't auto-open the popup --
+    # users can dismiss it (Esc) and keep typing without it popping back.
+    "pipe.text" => ($state | update pipeText ($frame.meta?.value? | default "") | update pipeHistoryCursor 0)
+    "pipe.history.open" => ($state | update pipeHistoryOpen true | update pipeHistoryCursor 0)
+    "pipe.history.close" => ($state | update pipeHistoryOpen false)
+    "pipe.history.cursor" => (pipe-cursor-move $state $frame)
+    "pipe.history.select" => (pipe-history-select $state)
     _ => $state
   }
   remember-cursor $s | update frameId ($frame.id? | default $s.frameId)
@@ -372,6 +377,50 @@ def deleted-select [state: record frame: record] {
     cycle $ids $state.selectedDeletedFrameId ($frame.meta?.action? | default "")
   }
   $state | update selectedDeletedFrameId $new_id
+}
+
+# History filtered by the current input text (case-insensitive substring).
+# Newest-first; UI reverses for visual layout (newest near input).
+export def pipe-filtered [state: record]: nothing -> list {
+  let term = $state.pipeText | str downcase
+  if ($term | is-empty) { $state.pipeHistory } else {
+    $state.pipeHistory | where {|s| ($s | str downcase | str contains $term) }
+  }
+}
+
+# Cursor index 0 = newest match (bottom of popup). Up = older = cursor++.
+# Down = newer = cursor--. meta.index sets cursor directly. Clamped to
+# filtered length.
+def pipe-cursor-move [state: record frame: record]: nothing -> record {
+  let n = pipe-filtered $state | length
+  if $n == 0 { return $state }
+  let cur = $state.pipeHistoryCursor
+  let next = if ($frame.meta?.index? != null) {
+    let clamped = [$frame.meta.index ($n - 1)] | math min
+    [$clamped 0] | math max
+  } else {
+    let action = $frame.meta?.action? | default ""
+    match $action {
+      "up" => (([($cur + 1) ($n - 1)] | math min))
+      "down" => (([($cur - 1) 0] | math max))
+      _ => $cur
+    }
+  }
+  $state | update pipeHistoryCursor $next
+}
+
+# Enter on a highlighted history row: replace input with that source,
+# close popup. The signal patch on the rendered SSE event syncs the
+# bound input.
+def pipe-history-select [state: record]: nothing -> record {
+  let filtered = pipe-filtered $state
+  if ($filtered | is-empty) { return ($state | update pipeHistoryOpen false) }
+  let idx = ([$state.pipeHistoryCursor (($filtered | length) - 1)] | math min)
+  let chosen = $filtered | get $idx
+  $state
+  | update pipeText $chosen
+  | update pipeHistoryOpen false
+  | update pipeHistoryCursor 0
 }
 
 # Cycle by `action`, jump by `id`. "top" jumps to the first id in render order.

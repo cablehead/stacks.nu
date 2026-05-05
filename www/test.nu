@@ -489,32 +489,52 @@ assert equal ($capped.pipeHistory | first) "cmd 105"
 assert equal ($capped.pipeHistory | last) "cmd 6"
 print "   ok"
 
-print "5t. pipe.history.open captures current input; select sets pipeText; close keeps it"
-let p_open = [
-  {topic: "pipe.command" id: "pc1" hash: null meta: {source: "str upcase"}}
-  {topic: "pipe.command" id: "pc2" hash: null meta: {source: "lines"}}
-  {topic: "pipe.open" id: "po1" hash: null meta: {clip_id: "c1"}}
-  {topic: "pipe.history.open" id: "pho1" hash: null meta: {current: "partial type"}}
-] | projection project
-assert equal $p_open.mode "pipe-history"
-assert equal $p_open.pipeText "partial type"
-
-let p_select = [
+print "5t. pipe.text updates pipeText; pipe.history.open/close toggles flag"
+let pt = [
   {topic: "pipe.command" id: "pc1" hash: null meta: {source: "str upcase"}}
   {topic: "pipe.open" id: "po1" hash: null meta: {clip_id: "c1"}}
-  {topic: "pipe.history.open" id: "pho1" hash: null meta: {current: "x"}}
-  {topic: "pipe.history.select" id: "phs1" hash: null meta: {source: "str upcase"}}
+  {topic: "pipe.text" id: "pt1" hash: null meta: {value: "str"}}
 ] | projection project
-assert equal $p_select.mode "pipe"
-assert equal $p_select.pipeText "str upcase"
+assert equal $pt.pipeText "str"
+assert equal $pt.pipeHistoryOpen false "typing alone doesn't open popup"
 
-let p_close = [
+let opened = [
   {topic: "pipe.open" id: "po1" hash: null meta: {clip_id: "c1"}}
-  {topic: "pipe.history.open" id: "pho1" hash: null meta: {current: "stashed"}}
-  {topic: "pipe.history.close" id: "phc1" hash: null meta: {}}
+  {topic: "pipe.history.open" id: "pho1" hash: null meta: {}}
 ] | projection project
-assert equal $p_close.mode "pipe"
-assert equal $p_close.pipeText "stashed" "close should leave pipeText (the user's stashed input)"
+assert equal $opened.pipeHistoryOpen true
+assert equal $opened.pipeHistoryCursor 0
+print "   ok"
+
+print "5u. pipe.history.cursor moves through filtered history (clamped)"
+let setup = [
+  {topic: "pipe.command" id: "pc1" hash: null meta: {source: "first"}}
+  {topic: "pipe.command" id: "pc2" hash: null meta: {source: "second"}}
+  {topic: "pipe.command" id: "pc3" hash: null meta: {source: "third"}}
+  {topic: "pipe.open" id: "po1" hash: null meta: {clip_id: "c1"}}
+  {topic: "pipe.history.open" id: "pho1" hash: null meta: {}}
+]
+let after_up = $setup | append [{topic: "pipe.history.cursor" id: "pc1" hash: null meta: {action: "up"}}] | projection project
+assert equal $after_up.pipeHistoryCursor 1
+
+let after_many = $setup | append [
+    {topic: "pipe.history.cursor" id: "p1" hash: null meta: {action: "up"}}
+    {topic: "pipe.history.cursor" id: "p2" hash: null meta: {action: "up"}}
+    {topic: "pipe.history.cursor" id: "p3" hash: null meta: {action: "up"}}
+    {topic: "pipe.history.cursor" id: "p4" hash: null meta: {action: "up"}}
+  ] | projection project
+assert equal $after_many.pipeHistoryCursor 2 "clamped at length-1"
+print "   ok"
+
+print "5v. pipe.history.select sets pipeText to filtered[cursor]"
+let selected = $setup | append [
+    {topic: "pipe.text" id: "pt1" hash: null meta: {value: "ir"}}
+    {topic: "pipe.history.cursor" id: "p1" hash: null meta: {action: "up"}}
+    {topic: "pipe.history.select" id: "ps1" hash: null meta: {}}
+  ] | projection project
+# pipeHistory newest-first: ["third","second","first"]; "ir" matches "third","first"
+assert equal $selected.pipeText "first"
+assert equal $selected.pipeHistoryOpen false
 print "   ok"
 
 print "5q. pipe.open / pipe.result / pipe.close cycle"

@@ -297,8 +297,10 @@
   </div>
   {% endif %}
 
-  {% if mode == "pipe" or mode == "pipe-history" %}
-  <div role="dialog" aria-modal="true" aria-label="Pipe clip" style="
+  {% if mode == "pipe" %}
+  <div role="dialog" aria-modal="true" aria-label="Pipe clip"
+    data-signals='{pipeText: {{ pipeText | tojson | safe }}}'
+    style="
     position: absolute;
     inset: 0;
     z-index: 1000;
@@ -349,14 +351,14 @@
         {% endif %}
       </section>
 
-      {% if mode == "pipe" %}
       <input
         id="pipe-text"
         type="text"
         placeholder="str upcase"
         spellcheck="false"
         autocomplete="off"
-        value="{{ pipeText }}"
+        data-bind="pipeText"
+        data-on-input__debounce.100ms="@post('/pipe/text')"
         data-init="el.focus(); el.setSelectionRange(el.value.length, el.value.length)"
         style="
           width: 100%;
@@ -369,28 +371,6 @@
           color: inherit;
         "
       />
-      {% else %}
-      <input
-        id="pipe-text-inert"
-        type="text"
-        placeholder="str upcase"
-        spellcheck="false"
-        autocomplete="off"
-        value="{{ pipeText }}"
-        readonly
-        tabindex="-1"
-        style="
-          width: 100%;
-          font-family: var(--font-mono);
-          font-size: var(--font-size-0);
-          padding: .6rem .85rem;
-          border: 0;
-          border-top: 1px solid var(--primary-7-dim);
-          background: var(--primary-7);
-          color: inherit;
-        "
-      />
-      {% endif %}
 
       <section id="pipe-result" aria-label="Pipeline result" style="
         overflow: auto;
@@ -410,12 +390,8 @@
         {% endif %}
       </section>
 
-      {% if mode == "pipe-history" %}
-      <div role="dialog" aria-modal="true" aria-label="Pipe history"
-        data-close-topic="pipe.history.close"
-        data-skip-close-on-invoke="1"
-        data-init="window.actionPanel && window.actionPanel.mount(el)"
-        style="
+      {% if pipeHistoryOpen and pipeFiltered %}
+      <div role="dialog" aria-modal="true" aria-label="Pipe history" style="
           position: absolute;
           left: .5rem;
           right: .5rem;
@@ -425,6 +401,7 @@
           z-index: 50;
           display: flex;
           flex-direction: column;
+          justify-content: flex-end;
           background: var(--primary-6);
           border: 1px solid var(--primary-7-dim);
           border-radius: var(--border-radius-3);
@@ -432,15 +409,12 @@
           overflow: hidden;
         "
       >
-        <div class="action-rows" style="flex: 1; overflow: auto; padding: .35rem; display: flex; flex-direction: column; justify-content: flex-end;">
-          {% for row in panelActions | reverse %}
+        <div style="overflow: auto; padding: .35rem;">
+          {% for src in pipeFiltered | reverse %}
+          {% set row_idx = (pipeFiltered | length) - 1 - loop.index0 %}
           <div
-            class="action-row{% if loop.last %} is-selected{% endif %}"
-            data-action="{{ row.action }}"
+            onmousedown="window.actions.impulse('pipe.history.cursor', {index: {{ row_idx }}}).then(() => window.actions.impulse('pipe.history.select', {}))"
             style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
               padding: .25rem .6rem;
               border-radius: var(--border-radius-1);
               cursor: pointer;
@@ -449,25 +423,14 @@
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
+              {% if row_idx == pipeHistoryCursor %}
+                background: var(--primary-3);
+                color: var(--primary-3-on);
+              {% endif %}
             "
-          >
-            <span style="overflow: hidden; text-overflow: ellipsis;">{{ row.label }}</span>
-          </div>
+            {% if row_idx == pipeHistoryCursor %}data-init="el.scrollIntoView({block: 'nearest'})"{% endif %}
+          >{{ src }}</div>
           {% endfor %}
-        </div>
-        <div style="padding: .6rem .85rem; border-top: 1px solid var(--primary-7-dim);">
-          <input
-            id="actions-filter"
-            type="text"
-            placeholder="Search history..."
-            spellcheck="false"
-            data-init="el.focus()"
-            style="
-              width: 100%;
-              font-size: var(--font-size--1);
-              line-height: var(--font-line-height-1);
-            "
-          />
         </div>
       </div>
       {% endif %}
