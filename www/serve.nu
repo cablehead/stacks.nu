@@ -175,7 +175,7 @@ def actions-for [mode: string ctx: record]: nothing -> record {
       # but data-actions hasn't been re-patched yet.
       "pipe.run": (js-fetch $"/pipe/run/($ctx.pipeClipId)"
       --body "(document.querySelector('.pipe-history-row.is-current')?.dataset.historySource ?? document.querySelector('#pipe-text').value)"
-      --then "if (document.querySelector('.pipe-history-row.is-current')) window.actions.impulse('pipe.history.select', {})")
+      --then "document.querySelector('.pipe-history-row.is-current') && window.actions.impulse('pipe.history.select', {})")
       "pipe.cancel": (js-impulse "pipe.close" {})
       "pipe.history.open": (js-impulse "pipe.history.open" {})
       "pipe.history.close": (js-impulse "pipe.history.close" {})
