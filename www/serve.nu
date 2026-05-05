@@ -18,25 +18,34 @@ use http-nu/datastar *
 use ./projection.nu
 
 # Decorate a clip with a one-line preview and (when small) the inlined body.
-def hydrate-clip [clip: record]: nothing -> record {
-  let mime = $clip.mime_type? | default "text/plain"
-  # Only fetch + text-process bodies that are actually text. Binary blobs
-  # (image/*, application/octet-stream, ...) would crash str-* commands and
-  # are rendered via /clips/:id/content, not inlined into the view-model.
-  let is_text = ($mime | str starts-with "text/") or $mime == "application/json"
-  # An inline `body` on the input record (e.g. from /design's synthetic
-  # state, where hashes don't resolve in CAS) wins over the CAS read.
-  let body = if $clip.body? != null and $clip.body? != "" {
-    $clip.body
-  } else if $clip.hash == null or (not $is_text) {
-    ""
-  } else {
-    try { .cas $clip.hash } catch { "" }
+# Fetch a CAS body and a one-line text preview, gated on mime type. Binary
+# blobs (image/*, application/octet-stream, ...) would crash the str-* pipe;
+# they get an empty body and a "(<mime>)" placeholder preview. Returns
+# {body, preview, is_text} -- callers wrap with their own metadata.
+def cas-preview [hash: any mime: any]: nothing -> record {
+  let m = $mime | default "text/plain"
+  let is_text = ($m | str starts-with "text/") or $m == "application/json"
+  let body = if $hash == null or (not $is_text) { "" } else {
+    try { .cas $hash } catch { "" }
   }
   let preview = if $is_text {
     $body | str replace -ar "\\s+" " " | str trim | str substring 0..120
   } else {
-    $"\(($mime)\)"
+    $"\(($m)\)"
+  }
+  {body: $body preview: $preview is_text: $is_text}
+}
+
+def hydrate-clip [clip: record]: nothing -> record {
+  let mime = $clip.mime_type? | default "text/plain"
+  let p = cas-preview $clip.hash? $mime
+  # Inline `body` on the input record (e.g. /design's synthetic clips,
+  # where hashes don't resolve in CAS) wins over the CAS read. Recompute
+  # preview from it so the inline body shows up in the clip list too.
+  let inline = $clip.body? | default ""
+  let body = if ($inline | is-empty) { $p.body } else { $inline }
+  let preview = if ($inline | is-empty) { $p.preview } else {
+    $inline | str replace -ar "\\s+" " " | str trim | str substring 0..120
   }
   let body_html = if $mime == "text/markdown" {
     try { $body | .md | get __html } catch { "" }
@@ -474,18 +483,8 @@ def view-model [state: record --is-mac = true]: nothing -> record {
         let parent_stack = $state.stacks | where id == $parent_id | get -i 0
         let parent_in_trash = $state.deleted | any {|e| $e.kind == "stack" and $e.snapshot.stack.id == $parent_id }
         let parent_alive = ($parent_stack != null) and (not $parent_in_trash)
-        # Only fetch + str-process text bodies. Binary clips (image/*, ...)
-        # would crash the str pipeline.
-        let mime = $entry.snapshot.clip.mime_type? | default "text/plain"
-        let is_text = ($mime | str starts-with "text/") or $mime == "application/json"
-        let body = if $entry.snapshot.clip.hash == null or (not $is_text) { "" } else {
-          try { .cas $entry.snapshot.clip.hash } catch { "" }
-        }
-        let preview = if $is_text {
-          $body | str replace -ar "\\s+" " " | str trim | str substring 0..120
-        } else {
-          $"\(($mime)\)"
-        }
+        let p = cas-preview $entry.snapshot.clip.hash? $entry.snapshot.clip.mime_type?
+        let preview = $p.preview
         {
           frame_id: $entry.frame_id
           kind: "clip"
