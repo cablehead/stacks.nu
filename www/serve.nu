@@ -237,16 +237,24 @@ def keymap-for [mode: string ctx: record]: nothing -> record {
       "u": "restore.do"
     }
     "pipe" => (if $ctx.pipeHistoryOpen {
-      # Popup open: arrows navigate rows, Enter selects, Esc closes popup.
-      # Mod+Enter still runs the input regardless.
+      # Popup open: arrows / Ctrl+P / Ctrl+N navigate rows, Enter selects,
+      # Esc closes popup. Mod+Enter still runs the input regardless.
+      # Ctrl+P/N work even with input focused -- the document-level keydown
+      # handler runs before the input consumes the event.
       {
         "escape": "pipe.history.close"
         "arrowup": "pipe.history.up"
         "arrowdown": "pipe.history.down"
+        "ctrl+p": "pipe.history.up"
+        "ctrl+n": "pipe.history.down"
         "enter": "pipe.history.select"
       } | upsert $"($mod)+enter" "pipe.run"
     } else {
-      {"escape": "pipe.cancel" "arrowup": "pipe.history.open"} | upsert $"($mod)+enter" "pipe.run"
+      {
+        "escape": "pipe.cancel"
+        "arrowup": "pipe.history.open"
+        "ctrl+p": "pipe.history.open"
+      } | upsert $"($mod)+enter" "pipe.run"
     })
     _ => (keymap-main $ctx)
   }
