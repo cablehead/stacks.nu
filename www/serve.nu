@@ -168,18 +168,14 @@ def actions-for [mode: string ctx: record]: nothing -> record {
       })
     }
     "pipe" => {
-      # Mod+Enter: when the history popup is open with a highlighted row,
-      # treat it as "accept this row and run it" -- POST the chosen source
-      # directly, then fire history.select so the server-side state aligns
-      # (popup closes, pipeText updates). When the popup is closed, run
-      # whatever's in the input.
-      "pipe.run": (if $ctx.pipeHistoryOpen and (not ($ctx.pipeFiltered | is-empty)) {
-        let idx = [$ctx.pipeHistoryCursor (($ctx.pipeFiltered | length) - 1)] | math min
-        let chosen = $ctx.pipeFiltered | get $idx
-        js-fetch $"/pipe/run/($ctx.pipeClipId)" --body ($chosen | to json -r) --then (js-impulse "pipe.history.select" {})
-      } else {
-        js-fetch $"/pipe/run/($ctx.pipeClipId)" --body "document.querySelector('#pipe-text').value"
-      })
+      # Mod+Enter: read the currently-highlighted history row at fire time
+      # (data-history-source on .is-current). Falls back to the input value
+      # when no row is highlighted (popup closed or empty filter). Reading
+      # from the DOM avoids the round-trip race where the cursor has moved
+      # but data-actions hasn't been re-patched yet.
+      "pipe.run": (js-fetch $"/pipe/run/($ctx.pipeClipId)"
+      --body "(document.querySelector('.pipe-history-row.is-current')?.dataset.historySource ?? document.querySelector('#pipe-text').value)"
+      --then "if (document.querySelector('.pipe-history-row.is-current')) window.actions.impulse('pipe.history.select', {})")
       "pipe.cancel": (js-impulse "pipe.close" {})
       "pipe.history.open": (js-impulse "pipe.history.open" {})
       "pipe.history.close": (js-impulse "pipe.history.close" {})

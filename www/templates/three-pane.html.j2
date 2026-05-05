@@ -373,6 +373,8 @@
             {% for src in pipeFiltered | reverse %}
             {% set row_idx = (pipeFiltered | length) - 1 - loop.index0 %}
             <div
+              class="pipe-history-row{% if row_idx == pipeHistoryCursor %} is-current{% endif %}"
+              data-history-source="{{ src }}"
               onmousedown="window.actions.impulse('pipe.history.cursor', {index: {{ row_idx }}}).then(() => window.actions.impulse('pipe.history.select', {}))"
               style="
                 padding: .25rem .6rem;
