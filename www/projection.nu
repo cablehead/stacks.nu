@@ -106,10 +106,12 @@ export def apply-frame [state: record frame: record]: nothing -> record {
     "pipe.close" => ($state | update mode "main" | update pipeClipId null | update pipeResult null | update pipeText "" | update pipeHistoryOpen false | update pipeHistoryCursor 0)
     "pipe.result" => ($state | update pipeResult {ok: ($frame.meta?.ok? | default false) body: ($frame.meta?.body? | default "") error: ($frame.meta?.error?)})
     "pipe.command" => ($state | update pipeHistory ([($frame.meta?.source? | default "")] | append $state.pipeHistory | first 100))
-    # User typed: server gets a fresh value from the bound signal. Reset
-    # cursor to 0 (bottom = newest match). Don't auto-open the popup --
-    # users can dismiss it (Esc) and keep typing without it popping back.
-    "pipe.text" => ($state | update pipeText ($frame.meta?.value? | default "") | update pipeHistoryCursor 0)
+    # User typed: server gets a fresh value from the bound signal. Auto-
+    # open the popup so the user sees matches immediately (the template
+    # also gates on pipeFiltered being non-empty, so the popup hides
+    # automatically when there are no matches). Reset cursor to 0
+    # (bottom = newest match).
+    "pipe.text" => ($state | update pipeText ($frame.meta?.value? | default "") | update pipeHistoryCursor 0 | update pipeHistoryOpen true)
     "pipe.history.open" => ($state | update pipeHistoryOpen true | update pipeHistoryCursor 0)
     "pipe.history.close" => ($state | update pipeHistoryOpen false)
     "pipe.history.cursor" => (pipe-cursor-move $state $frame)

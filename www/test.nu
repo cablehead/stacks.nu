@@ -496,7 +496,7 @@ let pt = [
   {topic: "pipe.text" id: "pt1" hash: null meta: {value: "str"}}
 ] | projection project
 assert equal $pt.pipeText "str"
-assert equal $pt.pipeHistoryOpen false "typing alone doesn't open popup"
+assert equal $pt.pipeHistoryOpen true "typing auto-opens popup"
 
 let opened = [
   {topic: "pipe.open" id: "po1" hash: null meta: {clip_id: "c1"}}
