@@ -811,8 +811,10 @@ window.toggleTheme = function() {
 };
 "
   }))
-  (BODY {data-init: "@get('/updates')"}
-  (MAIN "loading...")))
+  # Hosting the SSE @get on <main> instead of <body> protects it from
+  # Datastar's per-element AbortController if we ever migrate impulses
+  # from plain fetch to @post. See post-get-nuance.md for the trap.
+  (BODY (MAIN {data-init: "@get('/updates')"} "loading...")))
 }
 
 # First-run seed: when the store has never had a stack, drop in two stacks

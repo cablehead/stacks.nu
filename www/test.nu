@@ -618,7 +618,7 @@ print "7. serve.nu: GET / returns the bootstrap HTML"
 let handler = source ($script_dir | path join serve.nu)
 let response = do $handler {method: "GET" path: "/" headers: {} query: {}}
 let html = $response | get __html
-assert ($html | str contains "<main>") "page should include the <main> mount point"
+assert ($html | str contains "<main") "page should include the <main> mount point"
 assert ($html | str contains "/keys.js") "page should load the keymap handler"
 assert ($html | str contains "/updates") "page should bootstrap the SSE stream"
 assert ($html | str contains "iconify-icon@2") "bootstrap should pull in the iconify runtime"
