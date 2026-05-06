@@ -925,8 +925,15 @@ bootstrap-if-empty
 
     (route {method: "GET" path: "/updates"} {|req ctx|
       let is_mac = is-mac $req
-      .cat -f
-      | projection project-stream
+      # Persistent frames come from .cat -f (durable history + xs.threshold +
+      # live appends). Ephemeral UI signals (selection, mode toggles, pipe
+      # input, pipe results) come from .bus -- in-process pub/sub, no
+      # persistence, no cross-host wire traffic. We wrap each bus event into
+      # a frame-shaped record so apply-frame can fold them uniformly with
+      # store frames.
+      (null | interleave
+      { .cat -f }
+      { .bus sub | each {|e| {topic: $e.topic id: (.id) hash: null meta: $e.value} } }) | projection project-stream
       | each {|s| render-event $s --is-mac=$is_mac }
       | flatten
       | to sse
@@ -944,7 +951,7 @@ bootstrap-if-empty
         return ("topic not allowed" | metadata set { merge {'http.response': {status: 400}} })
       }
       let meta = $body.meta? | default {}
-      .append $topic --meta $meta --ttl ephemeral | ignore
+      $meta | .bus pub $topic
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
@@ -954,7 +961,7 @@ bootstrap-if-empty
       if not ($text | str trim | is-empty) {
         $text | .append clip.add --meta {stack_id: $ctx.id mime_type: "text/plain"} | ignore
       }
-      .append compose.close --meta {} --ttl ephemeral | ignore
+      {} | .bus pub compose.close | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
@@ -964,7 +971,7 @@ bootstrap-if-empty
       if not ($name | is-empty) {
         .append stack.update --meta {id: $ctx.id name: $name} | ignore
       }
-      .append rename.close --meta {} --ttl ephemeral | ignore
+      {} | .bus pub rename.close | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
@@ -978,7 +985,7 @@ bootstrap-if-empty
         # clip.update frames.
         $text | .append clip.update --meta {id: $ctx.id} | ignore
       }
-      .append editor.close --meta {} --ttl ephemeral | ignore
+      {} | .bus pub editor.close | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
@@ -990,7 +997,7 @@ bootstrap-if-empty
       let name = $in | default "" | str trim
       let meta = if ($name | is-empty) { {sort: "auto"} } else { {name: $name sort: "auto"} }
       let frame = .append stack.add --meta $meta
-      .append stack.select --meta {id: $frame.id} --ttl ephemeral | ignore
+      {id: $frame.id} | .bus pub stack.select | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
     (route {method: "POST" path: "/stacks"} {|req ctx|
@@ -1063,7 +1070,7 @@ bootstrap-if-empty
         "stack.delete" => { .append stack.restore --meta {target: $ctx.frame_id} | ignore }
         _ => { return ("frame is not a delete" | metadata set { merge {'http.response': {status: 400}} }) }
       }
-      .append trash.close --meta {} --ttl ephemeral | ignore
+      {} | .bus pub trash.close | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
@@ -1078,7 +1085,7 @@ bootstrap-if-empty
     (route {method: "POST" path: "/pipe/text"} {|req ctx|
       let signals = $in | from datastar-signals $req
       let value = $signals.pipeText? | default ""
-      .append pipe.text --meta {value: $value} --ttl ephemeral | ignore
+      {value: $value} | .bus pub pipe.text | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
     (route {method: "POST" path-matches: "/pipe/run/:clip_id"} {|req ctx|
@@ -1109,7 +1116,7 @@ bootstrap-if-empty
         let full = if ($detail | is-empty) { $e.msg } else { $"($e.msg): ($detail)" }
         {ok: false body: "" error: $full}
       }
-      .append pipe.result --meta $outcome --ttl ephemeral | ignore
+      $outcome | .bus pub pipe.result | ignore
       "" | metadata set { merge {'http.response': {status: 204}} }
     })
 
