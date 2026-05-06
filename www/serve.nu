@@ -1123,6 +1123,37 @@ bootstrap-if-empty
     })
 
     # ---- content + assets ----
+    # Content-addressed CAS fetch: URL keyed by content hash, so identical
+    # clips dedup at the browser cache layer and we can ship long max-age +
+    # immutable. Mime comes via ?type= since the route only has the hash.
+    (route {method: "GET" path-matches: "/cas/:hash"} {|req ctx|
+      # Strict SRI shape check before calling .cas (the upstream ssri crate
+      # panics on malformed input). Only sha256 (44 base64 chars) and
+      # sha512 (88 base64 chars) are accepted; that's what xs emits today.
+      let parts = $ctx.hash | split row "-"
+      let valid = (($parts | length) == 2) and (($parts.0 == "sha256" and (($parts.1 | str length) == 44)) or
+      ($parts.0 == "sha512" and (($parts.1 | str length) == 88)))
+      if not $valid {
+        return ("Not Found" | metadata set { merge {'http.response': {status: 404}} })
+      }
+      let mime = $req.query?.type? | default "application/octet-stream"
+      try {
+        .cas $ctx.hash | metadata set {
+          merge {
+            'http.response': {
+              headers: {
+                "Content-Type": $mime
+                "Cache-Control": "public, max-age=31536000, immutable"
+              }
+            }
+          }
+        }
+      } catch {
+        "Not Found" | metadata set { merge {'http.response': {status: 404}} }
+      }
+    })
+    # Legacy: keyed by frame id, no caching guarantees. Kept for backwards
+    # compat with any external consumers; new template references use /cas.
     (route {method: "GET" path-matches: "/clips/:id/content"} {|req ctx|
       let frame = .get $ctx.id
       if $frame == null or $frame.hash? == null {

@@ -654,6 +654,36 @@ assert equal $stack.name "Inbox"
 assert equal ($stack.clips | length) 1
 print "   ok"
 
+print "8d. GET /cas/:hash serves the CAS body for an unknown frame id"
+# Content-addressed: doesn't need a frame to exist. Stuff bytes into CAS,
+# fetch by hash.
+let png_bytes = 0x[89 50 4E 47 0D 0A 1A 0A]
+$png_bytes | do $handler {
+  method: "POST"
+  path: $"/stacks/($stack_id)/clips"
+  headers: {}
+  query: {mime_type: "image/png"}
+}
+let cas_clip = .cat | where topic == "clip.add" and meta.mime_type == "image/png" | last
+let body = do $handler {
+  method: "GET"
+  path: $"/cas/($cas_clip.hash)"
+  headers: {}
+  query: {type: "image/png"}
+}
+# Body should match the input bytes (the .cas read).
+assert equal ($body | into binary) ($png_bytes | into binary) "/cas returns the CAS body"
+
+# Unknown hash -> 404
+let bogus = do $handler {
+  method: "GET"
+  path: "/cas/sha256-bogus"
+  headers: {}
+  query: {}
+}
+assert equal $bogus "Not Found"
+print "   ok"
+
 print "8a. hydrate-clip uses inline `body` field when present (design-page synthetic clips)"
 # The /design page builds synthetic clip records with fake hashes that don't
 # resolve in CAS. Without a fallback the preview pane is empty -- the user
