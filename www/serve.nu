@@ -36,6 +36,14 @@ def cas-preview [hash: any mime: any]: nothing -> record {
   {body: $body preview: $preview is_text: $is_text}
 }
 
+# Look up the mime type that was associated with a CAS hash by scanning
+# the log for any frame that wrote it. CAS itself is bytes-only -- this
+# is how the /cas route serves Content-Type without callers having to
+# pass it. Unknown hash -> octet-stream.
+def mime-for-hash [hash: string]: nothing -> string {
+  .cat | where {|f| ($f.hash? | default null) == $hash } | last | get -i meta.mime_type | default "application/octet-stream"
+}
+
 def hydrate-clip [clip: record]: nothing -> record {
   let mime = $clip.mime_type? | default "text/plain"
   let p = cas-preview $clip.hash? $mime
@@ -1136,7 +1144,8 @@ bootstrap-if-empty
       if not $valid {
         return ("Not Found" | metadata set { merge {'http.response': {status: 404}} })
       }
-      let mime = $req.query?.type? | default "application/octet-stream"
+      # Mime is derived from any frame in the log that wrote this hash.
+      let mime = mime-for-hash $ctx.hash
       try {
         .cas $ctx.hash | metadata set {
           merge {

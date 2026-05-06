@@ -654,9 +654,9 @@ assert equal $stack.name "Inbox"
 assert equal ($stack.clips | length) 1
 print "   ok"
 
-print "8d. GET /cas/:hash serves the CAS body for an unknown frame id"
-# Content-addressed: doesn't need a frame to exist. Stuff bytes into CAS,
-# fetch by hash.
+print "8d. GET /cas/:hash serves the body; mime derived from a log frame"
+# CAS is bytes-only -- no mime stored alongside. The route scans for any
+# frame referencing this hash and uses its meta.mime_type.
 let png_bytes = 0x[89 50 4E 47 0D 0A 1A 0A]
 $png_bytes | do $handler {
   method: "POST"
@@ -665,14 +665,19 @@ $png_bytes | do $handler {
   query: {mime_type: "image/png"}
 }
 let cas_clip = .cat | where topic == "clip.add" and meta.mime_type == "image/png" | last
+# No ?type query -- server should derive mime from the log frame.
 let body = do $handler {
   method: "GET"
   path: $"/cas/($cas_clip.hash)"
   headers: {}
-  query: {type: "image/png"}
+  query: {}
 }
-# Body should match the input bytes (the .cas read).
 assert equal ($body | into binary) ($png_bytes | into binary) "/cas returns the CAS body"
+
+# Direct check on the helper that derives mime from the log.
+source ./serve.nu
+assert equal (mime-for-hash $cas_clip.hash) "image/png" "mime derived from log frame"
+assert equal (mime-for-hash "sha256-no-such-hash-here") "application/octet-stream" "fallback for unknown hash"
 
 # Unknown hash -> 404
 let bogus = do $handler {
