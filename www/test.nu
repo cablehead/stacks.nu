@@ -665,34 +665,34 @@ $png_bytes | do $handler {
   query: {mime_type: "image/png"}
 }
 let cas_clip = .cat | where topic == "clip.add" and meta.mime_type == "image/png" | last
-# No ?type query -- server should derive mime from the log frame.
+# Direct check on the helper that derives mime from the log.
+source ./serve.nu
+# No ?type query -- server should derive mime from the log frame. URL is
+# url-safe base64 (hash-url) since that's the wire format /cas expects.
 let body = do $handler {
   method: "GET"
-  path: $"/cas/($cas_clip.hash)"
+  path: $"/cas/(hash-url $cas_clip.hash)"
   headers: {}
   query: {}
 }
 assert equal ($body | into binary) ($png_bytes | into binary) "/cas returns the CAS body"
 
-# Direct check on the helper that derives mime from the log.
-source ./serve.nu
 assert equal (mime-for-hash $cas_clip.hash) "image/png" "mime derived from log frame"
 assert equal (mime-for-hash "sha256-no-such-hash-here") "application/octet-stream" "fallback for unknown hash"
 
-# hashUrl must be URL-path-safe (no literal /, +, =) so the router can
-# match :hash as a single path segment.
-let h_unsafe = "sha256-AB+CD/EF=="
-let encoded = hash-url $h_unsafe
-assert equal $encoded "sha256-AB%2BCD%2FEF%3D%3D" "%-encodes /, +, ="
-# The route must accept the encoded form and serve the same body as the
-# unencoded form would.
+# hashUrl translates standard base64 to URL-safe (RFC 4648 §5) and drops
+# padding, so the URL is path-clean (no /, +, =) without percent-encoding.
+let h_std = "sha256-AB+CD/EF=="
+let encoded = hash-url $h_std
+assert equal $encoded "sha256-AB-CD_EF" "url-safe alphabet, padding stripped"
+# Route reverses the translation before calling .cas.
 let safe_clip_resp = do $handler {
   method: "GET"
   path: $"/cas/(hash-url $cas_clip.hash)"
   headers: {}
   query: {}
 }
-assert equal ($safe_clip_resp | into binary) ($png_bytes | into binary) "encoded hash routes correctly"
+assert equal ($safe_clip_resp | into binary) ($png_bytes | into binary) "url-safe hash routes correctly"
 
 # Unknown hash -> 404
 let bogus = do $handler {

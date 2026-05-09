@@ -44,11 +44,36 @@ def mime-for-hash [hash: string]: nothing -> string {
   .cat | where {|f| ($f.hash? | default null) == $hash } | last | get -i meta.mime_type | default "application/octet-stream"
 }
 
-# Percent-encode the URL-unsafe chars in an SRI hash so it can sit as a
-# single path segment (`/cas/:hash`). Default `urlencode` filters keep
-# `/` as-is, which would split the path -- specifically encode /, +, =.
+# Translate xs's standard-base64 SRI hash (RFC 4648 §4: + / =) to the
+# URL-safe alphabet (RFC 4648 §5: - _) and strip padding, so the result
+# fits a URL path segment with no escaping. CSP3 / SRI permit both
+# alphabets in the same `base64-value`; the route reverses the swap
+# before handing the hash to ssri (which only speaks standard).
+#
+# The leading "<algo>-" separator stays intact -- only the digest part
+# (after the first `-`) gets the alphabet swap.
 export def hash-url [hash: string]: nothing -> string {
-  $hash | str replace -a "%" "%25" | str replace -a "/" "%2F" | str replace -a "+" "%2B" | str replace -a "=" "%3D"
+  let parts = $hash | split row --number 2 "-"
+  if ($parts | length) != 2 { return $hash }
+  let algo = $parts.0
+  let digest = $parts.1 | str replace -a "+" "-" | str replace -a "/" "_" | str replace -a "=" ""
+  $"($algo)-($digest)"
+}
+
+# Reverse hash-url: pad the digest back to a multiple of 4, then swap
+# url-safe alphabet back to standard. Algorithm prefix is preserved.
+def hash-from-url [encoded: string]: nothing -> string {
+  let parts = $encoded | split row --number 2 "-"
+  if ($parts | length) != 2 { return $encoded }
+  let algo = $parts.0
+  let raw = $parts.1
+  let pad = match (($raw | str length) mod 4) {
+    2 => "=="
+    3 => "="
+    _ => ""
+  }
+  let digest = $"($raw)($pad)" | str replace -a "-" "+" | str replace -a "_" "/"
+  $"($algo)-($digest)"
 }
 
 def hydrate-clip [clip: record]: nothing -> record {
@@ -1143,10 +1168,12 @@ bootstrap-if-empty
     # clips dedup at the browser cache layer and we can ship long max-age +
     # immutable. Mime comes via ?type= since the route only has the hash.
     (route {method: "GET" path-matches: "/cas/:hash"} {|req ctx|
+      # URL form is url-safe base64 with padding stripped; translate back
+      # to the standard alphabet that ssri/cacache (xs's CAS) speaks.
       # Strict SRI shape check before calling .cas (the upstream ssri crate
       # panics on malformed input). Only sha256 (44 base64 chars) and
       # sha512 (88 base64 chars) are accepted; that's what xs emits today.
-      let raw_hash = $ctx.hash | url decode
+      let raw_hash = hash-from-url $ctx.hash
       let parts = $raw_hash | split row "-"
       let valid = (($parts | length) == 2) and (($parts.0 == "sha256" and (($parts.1 | str length) == 44)) or
       ($parts.0 == "sha512" and (($parts.1 | str length) == 88)))
