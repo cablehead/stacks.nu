@@ -114,7 +114,7 @@
   ">
     {% if selectedClip %}
       {% if selectedClip.mime_type == "image/png" or selectedClip.mime_type == "image/jpeg" %}
-        <img src="/cas/{{ selectedClip.hash | urlencode }}" alt="" style="max-width: 100%; height: auto; border-radius: var(--border-radius-1);" />
+        <img src="/cas/{{ selectedClip.hashUrl }}" alt="" style="max-width: 100%; height: auto; border-radius: var(--border-radius-1);" />
       {% elif selectedClip.mime_type == "text/markdown" %}
         <div class="markdown" style="line-height: var(--font-line-height-1);">{{ selectedClip.bodyHtml | safe }}</div>
       {% else %}

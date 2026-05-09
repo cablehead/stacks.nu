@@ -44,6 +44,13 @@ def mime-for-hash [hash: string]: nothing -> string {
   .cat | where {|f| ($f.hash? | default null) == $hash } | last | get -i meta.mime_type | default "application/octet-stream"
 }
 
+# Percent-encode the URL-unsafe chars in an SRI hash so it can sit as a
+# single path segment (`/cas/:hash`). Default `urlencode` filters keep
+# `/` as-is, which would split the path -- specifically encode /, +, =.
+export def hash-url [hash: string]: nothing -> string {
+  $hash | str replace -a "%" "%25" | str replace -a "/" "%2F" | str replace -a "+" "%2B" | str replace -a "=" "%3D"
+}
+
 def hydrate-clip [clip: record]: nothing -> record {
   let mime = $clip.mime_type? | default "text/plain"
   let p = cas-preview $clip.hash? $mime
@@ -58,7 +65,8 @@ def hydrate-clip [clip: record]: nothing -> record {
   let body_html = if $mime == "text/markdown" {
     try { $body | .md | get __html } catch { "" }
   } else { "" }
-  $clip | upsert preview $preview | upsert body $body | upsert bodyHtml $body_html
+  let url = if $clip.hash? != null { hash-url $clip.hash } else { "" }
+  $clip | upsert preview $preview | upsert body $body | upsert bodyHtml $body_html | upsert hashUrl $url
 }
 
 # Apple-symbol display for special keys; letters stay as-is. Used by the
@@ -1138,16 +1146,17 @@ bootstrap-if-empty
       # Strict SRI shape check before calling .cas (the upstream ssri crate
       # panics on malformed input). Only sha256 (44 base64 chars) and
       # sha512 (88 base64 chars) are accepted; that's what xs emits today.
-      let parts = $ctx.hash | split row "-"
+      let raw_hash = $ctx.hash | url decode
+      let parts = $raw_hash | split row "-"
       let valid = (($parts | length) == 2) and (($parts.0 == "sha256" and (($parts.1 | str length) == 44)) or
       ($parts.0 == "sha512" and (($parts.1 | str length) == 88)))
       if not $valid {
         return ("Not Found" | metadata set { merge {'http.response': {status: 404}} })
       }
       # Mime is derived from any frame in the log that wrote this hash.
-      let mime = mime-for-hash $ctx.hash
+      let mime = mime-for-hash $raw_hash
       try {
-        .cas $ctx.hash | metadata set {
+        .cas $raw_hash | metadata set {
           merge {
             'http.response': {
               headers: {

@@ -679,6 +679,21 @@ source ./serve.nu
 assert equal (mime-for-hash $cas_clip.hash) "image/png" "mime derived from log frame"
 assert equal (mime-for-hash "sha256-no-such-hash-here") "application/octet-stream" "fallback for unknown hash"
 
+# hashUrl must be URL-path-safe (no literal /, +, =) so the router can
+# match :hash as a single path segment.
+let h_unsafe = "sha256-AB+CD/EF=="
+let encoded = hash-url $h_unsafe
+assert equal $encoded "sha256-AB%2BCD%2FEF%3D%3D" "%-encodes /, +, ="
+# The route must accept the encoded form and serve the same body as the
+# unencoded form would.
+let safe_clip_resp = do $handler {
+  method: "GET"
+  path: $"/cas/(hash-url $cas_clip.hash)"
+  headers: {}
+  query: {}
+}
+assert equal ($safe_clip_resp | into binary) ($png_bytes | into binary) "encoded hash routes correctly"
+
 # Unknown hash -> 404
 let bogus = do $handler {
   method: "GET"
